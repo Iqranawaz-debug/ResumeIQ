@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Backend local data (in-memory/local storage, not source code)
+backend/data/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Environment / secrets
+.env
+*.env
+.env.local
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db

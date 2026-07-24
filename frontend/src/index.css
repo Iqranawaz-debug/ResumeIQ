@@ -1,0 +1,80 @@
+:root {
+  --bg: #0a0912;
+  --bg-alt: #0f0e1a;
+  --surface: #15142299;
+  --surface-solid: #161522;
+  --surface-hover: #1c1b2b;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --text: #b9b6c9;
+  --text-strong: #f5f4fb;
+  --text-dim: #726f85;
+
+  --accent: #8b5cf6;
+  --accent-soft: rgba(139, 92, 246, 0.15);
+  --accent-border: rgba(139, 92, 246, 0.4);
+
+  --lime: #d4ff4f;
+  --lime-soft: rgba(212, 255, 79, 0.15);
+  --lime-text: #0f1400;
+
+  --danger: #ff6b81;
+  --danger-soft: rgba(255, 107, 129, 0.15);
+
+  --shadow: rgba(0, 0, 0, 0.5) 0 20px 40px -12px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  font: 16px/155% var(--sans);
+  color-scheme: dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(ellipse 900px 600px at 15% -10%, rgba(139, 92, 246, 0.22), transparent),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(212, 255, 79, 0.08), transparent),
+    var(--bg);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
