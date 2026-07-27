@@ -18,6 +18,21 @@ MATCH_PROMPT = (
     "'infrastructure as code' experience can reasonably satisfy a 'Terraform' "
     "requirement).\n"
     "- experience_note, education_note (short strings explaining the score).\n"
+    "- strengths (array of 2-4 short strings): specific things this "
+    "candidate's resume does well FOR THIS JOB, referencing their actual "
+    "skills/experience against the job description, not generic advice.\n"
+    "- suggestions (array of 2-4 short strings): written FOR THE RECRUITER "
+    "reviewing this candidate, not for the candidate. Specific next steps "
+    "the recruiter should take for THIS job — what to verify, ask about, "
+    "or probe further in an interview (e.g. 'Ask about hands-on experience "
+    "with X' or 'Confirm the gap in employment between 2021-2022'). Do not "
+    "phrase these as advice to the candidate.\n"
+    "- weaknesses (array of 2-4 short strings): specific gaps or concerns "
+    "in this candidate's fit for THIS job, based on their actual resume "
+    "vs. the job description.\n"
+    "- interview_questions (array of 3-5 strings): specific interview "
+    "questions a recruiter should ask THIS candidate for THIS job, probing "
+    "their weakest or most uncertain areas of fit.\n"
     "Return ONLY the JSON object, no other text, no markdown code fences.\n\n"
     "Candidate:\n{candidate_json}\n\n"
     "Job description:\n{job_description}"
@@ -60,4 +75,8 @@ def match_resume_to_job_ai(candidate: dict, job_description: str) -> dict:
         "education_score": result.education_score,
         "education_note": result.education_note,
         "extracted_requirements": result.requirements.model_dump(),
+        "strengths": result.strengths,
+        "suggestions": result.suggestions,
+        "weaknesses": result.weaknesses,
+        "interview_questions": result.interview_questions,
     }

@@ -36,3 +36,7 @@ class AIMatchResult(BaseModel):
     experience_note: str
     education_score: int
     education_note: str
+    strengths: list[str] = []
+    suggestions: list[str] = []
+    weaknesses: list[str] = []
+    interview_questions: list[str] = []

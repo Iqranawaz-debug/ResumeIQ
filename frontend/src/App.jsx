@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import Auth from './Auth'
 import BrandMark from './BrandMark'
+import ThemeToggle from './ThemeToggle'
+import PrintableReport from './PrintableReport'
 import './App.css'
 
-const UPLOAD_URL = 'http://localhost:8001/api/upload'
-const ANALYZE_URL = 'http://localhost:8001/api/analyze'
-const HISTORY_URL = 'http://localhost:8001/api/history'
-const LOGOUT_URL = 'http://localhost:8001/api/logout'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const UPLOAD_URL = `${API_BASE_URL}/api/upload`
+const ANALYZE_URL = `${API_BASE_URL}/api/analyze`
+const HISTORY_URL = `${API_BASE_URL}/api/history`
+const STATS_URL = `${API_BASE_URL}/api/stats`
+const LOGOUT_URL = `${API_BASE_URL}/api/logout`
 const ALLOWED_EXTENSIONS = ['pdf', 'docx']
 const MAX_FILE_SIZE_MB = 10
 
@@ -17,8 +21,34 @@ const RECOMMENDATION_CLASS = {
   'Not Recommended': 'rec-not',
 }
 
+const RADAR_LABELS = [
+  { key: 'technical_skills', label: 'Technical Skills' },
+  { key: 'communication', label: 'Communication' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'experience', label: 'Experience' },
+  { key: 'education', label: 'Education' },
+]
+
 function getExtension(filename) {
   return filename.includes('.') ? filename.split('.').pop().toLowerCase() : ''
+}
+
+const SKILL_CLOUD_MIN_SIZE = 14
+const SKILL_CLOUD_MAX_SIZE = 38
+
+function getSkillCloudSizes(skillCloud) {
+  const counts = Object.values(skillCloud)
+  const min = Math.min(...counts)
+  const max = Math.max(...counts)
+  const sizes = {}
+  for (const [skill, count] of Object.entries(skillCloud)) {
+    sizes[skill] =
+      max === min
+        ? (SKILL_CLOUD_MIN_SIZE + SKILL_CLOUD_MAX_SIZE) / 2
+        : SKILL_CLOUD_MIN_SIZE +
+          ((count - min) / (max - min)) * (SKILL_CLOUD_MAX_SIZE - SKILL_CLOUD_MIN_SIZE)
+  }
+  return sizes
 }
 
 function validateFile(file) {
@@ -38,6 +68,7 @@ function validateFile(file) {
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('resumeiq_token'))
   const [username, setUsername] = useState(() => localStorage.getItem('resumeiq_username'))
+  const [theme, setTheme] = useState(() => localStorage.getItem('resumeiq_theme') || 'dark')
 
   const [isDragging, setIsDragging] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('idle') // idle | uploading | success | error
@@ -52,9 +83,21 @@ function App() {
   const [analysisMessage, setAnalysisMessage] = useState('')
   const [analysis, setAnalysis] = useState(null)
   const [history, setHistory] = useState([])
+  const [stats, setStats] = useState(null)
+  const [uploadedFile, setUploadedFile] = useState(null)
+  const [historySearch, setHistorySearch] = useState('')
 
   const inputRef = useRef(null)
   const jdFileRef = useRef(null)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('resumeiq_theme', theme)
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
+  }
 
   useEffect(() => {
     if (!token) return
@@ -70,6 +113,11 @@ function App() {
         return res.ok ? res.json() : { history: [] }
       })
       .then((data) => setHistory(data.history || []))
+      .catch(() => {})
+
+    fetch(STATS_URL, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setStats(data))
       .catch(() => {})
   }, [token])
 
@@ -98,12 +146,15 @@ function App() {
     setAnalysis(null)
     setAnalysisStatus('idle')
     setHistory([])
+    setStats(null)
     setJobDescription('')
     setJdFile(null)
+    setUploadedFile(null)
+    setHistorySearch('')
   }
 
   if (!token) {
-    return <Auth onAuthSuccess={handleAuthSuccess} />
+    return <Auth theme={theme} onToggleTheme={toggleTheme} onAuthSuccess={handleAuthSuccess} />
   }
 
   async function uploadFile(file) {
@@ -115,6 +166,7 @@ function App() {
       setCandidate(null)
       setAnalysis(null)
       setAnalysisStatus('idle')
+      setUploadedFile(null)
       return
     }
 
@@ -142,11 +194,13 @@ function App() {
       setUploadMessage(data.message)
       setFileName(data.filename)
       setCandidate(data.candidate || null)
+      setUploadedFile(file)
     } catch (err) {
       setUploadStatus('error')
       setUploadMessage(err.message || 'Could not reach the server.')
       setFileName('')
       setCandidate(null)
+      setUploadedFile(null)
     }
   }
 
@@ -176,11 +230,80 @@ function App() {
       setAnalysisStatus('success')
       setAnalysis(data.analysis)
       setHistory(data.history || [])
+      setStats(data.stats || null)
     } catch (err) {
       setAnalysisStatus('error')
       setAnalysisMessage(err.message || 'Could not reach the server.')
       setAnalysis(null)
     }
+  }
+
+  function handleViewResume() {
+    if (!uploadedFile) return
+    const url = URL.createObjectURL(uploadedFile)
+    window.open(url, '_blank', 'noopener')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
+  function handleDownloadRecommendation() {
+    if (!candidate || !analysis) return
+
+    const lines = [
+      'ResumeIQ - Candidate Evaluation Report',
+      `Generated: ${new Date().toLocaleString()}`,
+      '',
+      'CANDIDATE',
+      `Name: ${candidate.name || 'Not found'}`,
+      `Email: ${candidate.email || 'Not found'}`,
+      `Phone: ${candidate.phone || 'Not found'}`,
+      '',
+      'SCORE & RECOMMENDATION',
+      `Overall Score: ${analysis.overall_score} / 100`,
+      `Recommendation: ${analysis.recommendation}`,
+      `Experience Level: ${analysis.experience_level}`,
+      `Years of Experience: ${analysis.total_experience_years}`,
+      `Skills Identified: ${analysis.skills_count}`,
+    ]
+
+    if (analysis.missing_sections.length > 0) {
+      lines.push(`Missing Sections: ${analysis.missing_sections.join(', ')}`)
+    }
+
+    if (analysis.job_fit_score !== null && analysis.job_fit_score !== undefined) {
+      lines.push(
+        '',
+        'SCORE COMPARISON',
+        `Resume Only: ${analysis.resume_quality_score} / 100 - ${analysis.resume_only_recommendation}`,
+        `Job Description Match: ${analysis.job_fit_score} / 100 - ${analysis.job_fit_label}`,
+        `Combined (Overall): ${analysis.overall_score} / 100 - ${analysis.recommendation}`,
+      )
+      if (analysis.matched_skills.length > 0) {
+        lines.push('', 'MATCHED SKILLS', ...analysis.matched_skills.map((s) => `- ${s}`))
+      }
+      if (analysis.missing_skills.length > 0) {
+        lines.push('', 'MISSING SKILLS', ...analysis.missing_skills.map((s) => `- ${s}`))
+      }
+    }
+
+    if (candidate.skills.length > 0) {
+      lines.push('', 'SKILLS', ...candidate.skills.map((s) => `- ${s}`))
+    }
+    if (analysis.strengths.length > 0) {
+      lines.push('', 'STRENGTHS', ...analysis.strengths.map((s) => `- ${s}`))
+    }
+    if (analysis.suggestions.length > 0) {
+      lines.push('', 'SUGGESTIONS', ...analysis.suggestions.map((s) => `- ${s}`))
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${(candidate.name || 'candidate').replace(/\s+/g, '_')}_evaluation.txt`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 
   function handleDrop(event) {
@@ -195,7 +318,11 @@ function App() {
     if (file) uploadFile(file)
   }
 
-  const canAnalyze = jdInputMode === 'text' ? Boolean(jobDescription.trim()) : Boolean(jdFile)
+  const hasJobDescription = jdInputMode === 'text' ? Boolean(jobDescription.trim()) : Boolean(jdFile)
+
+  const filteredHistory = history.filter((entry) =>
+    (entry.name || '').toLowerCase().includes(historySearch.trim().toLowerCase())
+  )
 
   return (
     <div className="page">
@@ -205,6 +332,7 @@ function App() {
           <span className="brand-name">ResumeIQ</span>
         </div>
         <div className="header-user">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <span className="top-bar-user">Signed in as <strong>{username}</strong></span>
           <button type="button" className="link-button" onClick={handleLogout}>
             Log out
@@ -214,12 +342,40 @@ function App() {
 
       <div className="hero">
         <p className="eyebrow">/ AI RESUME EVALUATOR</p>
-        <h1>Score your resume against the job you want.</h1>
+        <h1>Score candidate resumes against your job requirements.</h1>
         <p className="subtitle">
-          Upload your resume, add the job description, and get one score and
-          recommendation that accounts for both resume quality and job fit.
+          Upload a candidate's resume, add the job description, and get one score
+          and hiring recommendation that accounts for both resume quality and job fit.
         </p>
       </div>
+
+      {stats && stats.total_resumes > 0 && (
+        <section className="section">
+          <h2 className="section-title">Today's Evaluations</h2>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <span className="stat-card-value">{stats.total_resumes}</span>
+              <span className="stat-card-label">Total Resumes</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-value">{stats.recommended}</span>
+              <span className="stat-card-label">Recommended</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-value">{stats.rejected}</span>
+              <span className="stat-card-label">Rejected</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-value">{stats.average_score}</span>
+              <span className="stat-card-label">Average Score</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-value">{stats.top_skill || '—'}</span>
+              <span className="stat-card-label">Top Skill</span>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="section">
         <h2 className="section-title"><span className="step-index">01</span> Upload Resume</h2>
@@ -258,7 +414,18 @@ function App() {
 
       {candidate && (
         <section className="section">
-          <h2 className="section-title"><span className="step-index">02</span> Resume Information</h2>
+          <h2 className="section-title">
+            <span className="step-index">02</span> Resume Information
+            {uploadedFile && (
+              <button
+                type="button"
+                className="link-button section-action"
+                onClick={handleViewResume}
+              >
+                View Uploaded File
+              </button>
+            )}
+          </h2>
           <div className="candidate-card">
             <p><strong>Name:</strong> {candidate.name || 'Not found'}</p>
             <p><strong>Email:</strong> {candidate.email || 'Not found'}</p>
@@ -266,13 +433,41 @@ function App() {
 
             <p className="field-label"><strong>Skills</strong></p>
             {candidate.skills.length > 0 ? (
-              <ul className="skill-list">
-                {candidate.skills.map((skill) => (
-                  <li key={skill}>{skill}</li>
-                ))}
-              </ul>
+              candidate.skills_by_category ? (
+                <div className="skill-categories">
+                  {Object.entries(candidate.skills_by_category).map(([category, skills]) => (
+                    <div className="skill-category" key={category}>
+                      <p className="skill-category-title">{category}</p>
+                      <ul className="skill-list">
+                        {skills.map((skill) => (
+                          <li key={skill}>{skill}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ul className="skill-list">
+                  {candidate.skills.map((skill) => (
+                    <li key={skill}>{skill}</li>
+                  ))}
+                </ul>
+              )
             ) : (
               <p className="not-found">Not found</p>
+            )}
+
+            {candidate.skill_cloud && Object.keys(candidate.skill_cloud).length > 0 && (
+              <>
+                <p className="field-label"><strong>Skill Cloud</strong></p>
+                <div className="skill-cloud">
+                  {Object.entries(getSkillCloudSizes(candidate.skill_cloud)).map(([skill, size]) => (
+                    <span key={skill} className="skill-cloud-word" style={{ fontSize: `${size}px` }}>
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </>
             )}
 
             <p className="field-label"><strong>Education</strong></p>
@@ -314,10 +509,14 @@ function App() {
 
       {candidate && (
         <section className="section">
-          <h2 className="section-title"><span className="step-index">03</span> Add Job Description</h2>
+          <h2 className="section-title">
+            <span className="step-index">03</span> Add Job Description
+            <span className="section-title-hint">optional</span>
+          </h2>
           <div className="candidate-card">
             <p className="dropzone-hint" style={{ marginBottom: 10 }}>
-              Paste the job description or upload it as a file, then analyze.
+              Add a job description to also get a job-fit score against a specific
+              role — or skip it and evaluate the resume on its own.
             </p>
 
             <div className="jd-mode-toggle">
@@ -366,10 +565,14 @@ function App() {
 
             <button
               className="evaluate-button"
-              disabled={!canAnalyze || analysisStatus === 'analyzing'}
+              disabled={analysisStatus === 'analyzing'}
               onClick={handleAnalyze}
             >
-              {analysisStatus === 'analyzing' ? 'Analyzing...' : 'Analyze'}
+              {analysisStatus === 'analyzing'
+                ? 'Analyzing...'
+                : hasJobDescription
+                  ? 'Analyze Against Job Description'
+                  : 'Evaluate Resume Only'}
             </button>
             {analysisStatus === 'error' && <p className="status error">{analysisMessage}</p>}
           </div>
@@ -378,7 +581,16 @@ function App() {
 
       {analysis && (
         <section className="section">
-          <h2 className="section-title"><span className="step-index">04</span> Analysis Result</h2>
+          <h2 className="section-title">
+            <span className="step-index">04</span> Analysis Result
+            <button
+              type="button"
+              className="link-button section-action"
+              onClick={handleDownloadRecommendation}
+            >
+              Download Recommendation
+            </button>
+          </h2>
           <div className="evaluation-card">
             <div className="score-row">
               <div className="score-ring" style={{ '--score': analysis.overall_score }}>
@@ -395,22 +607,56 @@ function App() {
               </div>
             </div>
 
-            <div className="breakdown">
-              <div className="breakdown-row">
-                <span className="breakdown-label">resume quality</span>
-                <div className="breakdown-track">
-                  <div className="breakdown-fill" style={{ width: `${analysis.resume_quality_score}%` }} />
+            {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
+              <>
+                <div className="breakdown">
+                  <div className="breakdown-row">
+                    <span className="breakdown-label">resume quality</span>
+                    <div className="breakdown-track">
+                      <div className="breakdown-fill" style={{ width: `${analysis.resume_quality_score}%` }} />
+                    </div>
+                    <span className="breakdown-value">{analysis.resume_quality_score}%</span>
+                  </div>
+                  <div className="breakdown-row">
+                    <span className="breakdown-label">job fit</span>
+                    <div className="breakdown-track">
+                      <div className="breakdown-fill" style={{ width: `${analysis.job_fit_score}%` }} />
+                    </div>
+                    <span className="breakdown-value">{analysis.job_fit_score}%</span>
+                  </div>
                 </div>
-                <span className="breakdown-value">{analysis.resume_quality_score}%</span>
-              </div>
-              <div className="breakdown-row">
-                <span className="breakdown-label">job fit</span>
-                <div className="breakdown-track">
-                  <div className="breakdown-fill" style={{ width: `${analysis.job_fit_score}%` }} />
+
+                <p className="field-label"><strong>Score Comparison</strong></p>
+                <div className="table-scroll">
+                  <table className="history-table comparison-table">
+                    <thead>
+                      <tr>
+                        <th>Basis</th>
+                        <th>Score</th>
+                        <th>Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Resume only</td>
+                        <td>{analysis.resume_quality_score} / 100</td>
+                        <td>{analysis.resume_only_recommendation}</td>
+                      </tr>
+                      <tr>
+                        <td>Job description match</td>
+                        <td>{analysis.job_fit_score} / 100</td>
+                        <td>{analysis.job_fit_label}</td>
+                      </tr>
+                      <tr>
+                        <td>Combined (overall)</td>
+                        <td>{analysis.overall_score} / 100</td>
+                        <td>{analysis.recommendation}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <span className="breakdown-value">{analysis.job_fit_score}%</span>
-              </div>
-            </div>
+              </>
+            )}
 
             <div className="eval-stats">
               <div>
@@ -433,35 +679,79 @@ function App() {
               </div>
             )}
 
-            <p className="field-label"><strong>Matched Skills</strong></p>
-            {analysis.matched_skills.length > 0 ? (
-              <ul className="skill-list">
-                {analysis.matched_skills.map((skill) => (
-                  <li key={skill}>{skill}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="not-found">None matched</p>
+            {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
+              <>
+                {analysis.matched_skills.length === 0 && analysis.missing_skills.length === 0 ? (
+                  <>
+                    <p className="field-label"><strong>Skill Match</strong></p>
+                    <p className="not-found">
+                      No specific skills could be identified in this job description to compare
+                      against the resume.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="field-label"><strong>Matched Skills</strong></p>
+                    {analysis.matched_skills.length > 0 ? (
+                      <ul className="skill-list">
+                        {analysis.matched_skills.map((skill) => (
+                          <li key={skill}>{skill}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="not-found">None of the required skills were found on the resume</p>
+                    )}
+
+                    <p className="field-label"><strong>Missing Skills</strong></p>
+                    {analysis.missing_skills.length > 0 ? (
+                      <ul className="skill-list skill-list-missing">
+                        {analysis.missing_skills.map((skill) => (
+                          <li key={skill}>{skill}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="not-found">None &mdash; all required skills found</p>
+                    )}
+                  </>
+                )}
+
+                <p className="field-label">{analysis.experience_note}</p>
+                <p className="field-label">{analysis.education_note}</p>
+              </>
             )}
 
-            <p className="field-label"><strong>Missing Skills</strong></p>
-            {analysis.missing_skills.length > 0 ? (
-              <ul className="skill-list skill-list-missing">
-                {analysis.missing_skills.map((skill) => (
-                  <li key={skill}>{skill}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="not-found">None &mdash; all required skills found</p>
+            {analysis.radar && (
+              <>
+                <p className="field-label"><strong>Candidate Strength Radar</strong></p>
+                <div className="breakdown radar-breakdown">
+                  {RADAR_LABELS.map(({ key, label }) => (
+                    <div className="breakdown-row" key={key}>
+                      <span className="breakdown-label">{label}</span>
+                      <div className="breakdown-track">
+                        <div className="breakdown-fill" style={{ width: `${analysis.radar[key]}%` }} />
+                      </div>
+                      <span className="breakdown-value">{analysis.radar[key]}%</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
-
-            <p className="field-label">{analysis.experience_note}</p>
-            <p className="field-label">{analysis.education_note}</p>
 
             <p className="field-label"><strong>Strengths</strong></p>
             {analysis.strengths.length > 0 ? (
               <ul>
                 {analysis.strengths.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="not-found">None identified</p>
+            )}
+
+            <p className="field-label"><strong>Weaknesses</strong></p>
+            {analysis.weaknesses && analysis.weaknesses.length > 0 ? (
+              <ul>
+                {analysis.weaknesses.map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
               </ul>
@@ -475,6 +765,21 @@ function App() {
                 <li key={i}>{item}</li>
               ))}
             </ul>
+
+            <p className="field-label"><strong>Suggested Interview Questions</strong></p>
+            {analysis.interview_questions && analysis.interview_questions.length > 0 ? (
+              <ol>
+                {analysis.interview_questions.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ol>
+            ) : (
+              <p className="not-found">None generated</p>
+            )}
+
+            <button type="button" className="evaluate-button print-report-button" onClick={() => window.print()}>
+              Generate Full Report (PDF)
+            </button>
           </div>
         </section>
       )}
@@ -485,28 +790,47 @@ function App() {
             <span className="step-index">05</span> Evaluation History
             <span className="section-title-hint">last {history.length}</span>
           </h2>
-          <table className="history-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Score</th>
-                <th>Recommendation</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((entry, i) => (
-                <tr key={i}>
-                  <td>{entry.name}</td>
-                  <td>{entry.score}</td>
-                  <td>{entry.recommendation}</td>
-                  <td>{entry.evaluated_at}</td>
+          <input
+            type="text"
+            className="history-search"
+            placeholder="Search by candidate name..."
+            value={historySearch}
+            onChange={(e) => setHistorySearch(e.target.value)}
+          />
+          <div className="table-scroll">
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Score</th>
+                  <th>Recommendation</th>
+                  <th>Time</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredHistory.length > 0 ? (
+                  filteredHistory.map((entry, i) => (
+                    <tr key={i}>
+                      <td>{entry.name}</td>
+                      <td>{entry.score}</td>
+                      <td>{entry.recommendation}</td>
+                      <td>{entry.evaluated_at}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="not-found">
+                      No evaluations match "{historySearch}"
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
+
+      <PrintableReport candidate={candidate} analysis={analysis} />
     </div>
   )
 }

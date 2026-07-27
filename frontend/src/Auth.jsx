@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import BrandMark from './BrandMark'
+import ThemeToggle from './ThemeToggle'
 
-const SIGNUP_URL = 'http://localhost:8001/api/signup'
-const LOGIN_URL = 'http://localhost:8001/api/login'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const SIGNUP_URL = `${API_BASE_URL}/api/signup`
+const LOGIN_URL = `${API_BASE_URL}/api/login`
 
-function Auth({ onAuthSuccess }) {
+function Auth({ onAuthSuccess, theme, onToggleTheme }) {
   const [mode, setMode] = useState('login') // login | signup
-  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -18,14 +19,12 @@ function Auth({ onAuthSuccess }) {
     setSubmitting(true)
 
     const url = mode === 'login' ? LOGIN_URL : SIGNUP_URL
-    const body =
-      mode === 'login' ? { username, password } : { username, email, password }
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ email, password }),
       })
       const data = await response.json()
 
@@ -49,13 +48,16 @@ function Auth({ onAuthSuccess }) {
   return (
     <div className="auth-page">
       <div className="auth-panel auth-panel-brand">
-        <div className="brand">
-          <BrandMark />
-          <span className="brand-name">ResumeIQ</span>
+        <div className="auth-brand-row">
+          <div className="brand">
+            <BrandMark />
+            <span className="brand-name">ResumeIQ</span>
+          </div>
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
 
         <h1 className="auth-headline">
-          Know where your resume stands before a recruiter opens it.
+          Screen every candidate resume in seconds, not hours.
         </h1>
         <p className="auth-copy">
           AI-powered scoring across contact info, skills, education, and
@@ -106,25 +108,14 @@ function Auth({ onAuthSuccess }) {
 
           <form className="auth-form" onSubmit={handleSubmit}>
             <label>
-              Username
+              Email
               <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </label>
-
-            {mode === 'signup' && (
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </label>
-            )}
 
             <label>
               Password

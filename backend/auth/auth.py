@@ -22,8 +22,8 @@ def _save_users() -> None:
         json.dump(users, f, indent=2)
 
 
-users: dict = _load_users()  # username -> {"email": str, "salt": str, "password_hash": str}
-sessions: dict = {}  # token -> username
+users: dict = _load_users()  # email -> {"salt": str, "password_hash": str}
+sessions: dict = {}  # token -> email
 
 
 class AuthError(Exception):
@@ -36,38 +36,37 @@ def _hash_password(password: str, salt: str) -> str:
     ).hex()
 
 
-def create_user(username: str, email: str, password: str) -> None:
-    username = username.strip()
-    if not username or not email or not password:
-        raise AuthError("Username, email, and password are all required.")
-    if username in users:
-        raise AuthError("That username is already taken.")
+def create_user(email: str, password: str) -> None:
+    email = email.strip().lower()
+    if not email or not password:
+        raise AuthError("Email and password are required.")
+    if email in users:
+        raise AuthError("An account with that email already exists.")
     if len(password) < 6:
         raise AuthError("Password must be at least 6 characters long.")
 
     salt = secrets.token_hex(16)
-    users[username] = {
-        "email": email.strip(),
+    users[email] = {
         "salt": salt,
         "password_hash": _hash_password(password, salt),
     }
     _save_users()
 
 
-def verify_user(username: str, password: str) -> bool:
-    user = users.get(username)
+def verify_user(email: str, password: str) -> bool:
+    user = users.get(email.strip().lower())
     if not user:
         return False
     return _hash_password(password, user["salt"]) == user["password_hash"]
 
 
-def create_session(username: str) -> str:
+def create_session(email: str) -> str:
     token = secrets.token_hex(32)
-    sessions[token] = username
+    sessions[token] = email
     return token
 
 
-def get_username_from_token(token: str):
+def get_email_from_token(token: str):
     return sessions.get(token)
 
 

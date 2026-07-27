@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile, File
@@ -8,63 +9,104 @@ from auth.auth import (
     create_session,
     create_user,
     destroy_session,
-    get_username_from_token,
+    get_email_from_token,
     verify_user,
 )
-from ai.extractor import extract_candidate_info_ai
 from auth.schemas import LoginRequest, SignupRequest
 from evaluator.analyzer import analyze_resume_for_job
 from extractor.extractor import extract_candidate_info
 from parser.document_parser import parse_document
 from parser.resume_parser import parse_resume
 from utils.resume_checker import looks_like_resume
+from utils.skills import categorize_skills, count_skill_mentions
 from utils.validators import validate_resume_file
 
 ALLOWED_JOB_DESCRIPTION_EXTENSIONS = ["pdf", "docx", "txt"]
+
+# Comma-separated list, e.g. "https://myapp.vercel.app,http://localhost:5173"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
 
 app = FastAPI(title="ResumeIQ API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory storage, keyed per logged-in user (no database required).
+# In-memory storage, keyed per logged-in user's email (no database required).
 validated_resumes: dict = {}
 evaluation_histories: dict = {}
+daily_evaluations: dict = {}  # username -> uncapped list of every evaluation run today
 MAX_HISTORY = 5
+
+RECOMMENDED_LABELS = {"Highly Recommended", "Recommended"}
+REJECTED_LABEL = "Not Recommended"
+
+
+def compute_daily_stats(username: str) -> dict:
+    today = datetime.now().date().isoformat()
+    todays = [e for e in daily_evaluations.get(username, []) if e["date"] == today]
+
+    total_resumes = len(todays)
+    recommended = sum(1 for e in todays if e["recommendation"] in RECOMMENDED_LABELS)
+    rejected = sum(1 for e in todays if e["recommendation"] == REJECTED_LABEL)
+    average_score = round(sum(e["score"] for e in todays) / total_resumes) if total_resumes else 0
+
+    skill_counts: dict = {}
+    for e in todays:
+        for skill in e["skills"]:
+            key = skill.strip()
+            if not key:
+                continue
+            lower = key.lower()
+            if lower not in skill_counts:
+                skill_counts[lower] = {"label": key, "count": 0}
+            skill_counts[lower]["count"] += 1
+    top_skill = max(skill_counts.values(), key=lambda s: s["count"])["label"] if skill_counts else None
+
+    return {
+        "total_resumes": total_resumes,
+        "recommended": recommended,
+        "rejected": rejected,
+        "average_score": average_score,
+        "top_skill": top_skill,
+    }
 
 
 def require_user(authorization: str = Header(default="")) -> str:
     token = authorization.removeprefix("Bearer ").strip()
-    username = get_username_from_token(token) if token else None
-    if not username:
+    email = get_email_from_token(token) if token else None
+    if not email:
         raise HTTPException(status_code=401, detail="Not authenticated.")
-    return username
+    return email
 
 
 @app.post("/api/signup")
 async def signup(payload: SignupRequest):
-    username = payload.username.strip()
+    email = payload.email.strip()
     try:
-        create_user(username, payload.email, payload.password)
+        create_user(email, payload.password)
     except AuthError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    token = create_session(username)
-    return {"token": token, "username": username}
+    token = create_session(email)
+    return {"token": token, "username": email}
 
 
 @app.post("/api/login")
 async def login(payload: LoginRequest):
-    username = payload.username.strip()
-    if not verify_user(username, payload.password):
-        raise HTTPException(status_code=401, detail="Invalid username or password.")
+    email = payload.email.strip()
+    if not verify_user(email, payload.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
 
-    token = create_session(username)
-    return {"token": token, "username": username}
+    token = create_session(email)
+    return {"token": token, "username": email}
 
 
 @app.post("/api/logout")
@@ -96,12 +138,13 @@ async def upload_resume(
     if not is_resume:
         raise HTTPException(status_code=400, detail=resume_error)
 
-    try:
-        candidate = extract_candidate_info_ai(text)
-        extraction_method = "ai"
-    except Exception:
-        candidate = extract_candidate_info(text)
-        extraction_method = "rule-based"
+    # Extraction runs rule-based only (fast, instant) — AI is reserved for the
+    # JD-matching step in /api/analyze, which is where it adds the most value.
+    candidate = extract_candidate_info(text)
+    candidate["skills_by_category"] = categorize_skills(candidate.get("skills") or [])
+    candidate["skill_cloud"] = count_skill_mentions(text, candidate.get("skills") or [])
+    extraction_method = "rule-based"
+    extraction_model = None
 
     validated_resumes[username] = {
         "filename": file.filename,
@@ -111,6 +154,7 @@ async def upload_resume(
         "text": text,
         "candidate": candidate,
         "extraction_method": extraction_method,
+        "extraction_model": extraction_model,
     }
 
     return {
@@ -120,12 +164,18 @@ async def upload_resume(
         "text": text,
         "candidate": candidate,
         "extraction_method": extraction_method,
+        "extraction_model": extraction_model,
     }
 
 
 @app.get("/api/history")
 async def get_history(username: str = Depends(require_user)):
     return {"history": evaluation_histories.get(username, [])}
+
+
+@app.get("/api/stats")
+async def get_stats(username: str = Depends(require_user)):
+    return compute_daily_stats(username)
 
 
 @app.post("/api/analyze")
@@ -162,13 +212,10 @@ async def analyze_resume(
                 status_code=422, detail="Could not read the job description file."
             )
 
-    if not jd_text.strip():
-        raise HTTPException(
-            status_code=400, detail="Provide a job description as text or a file."
-        )
-
     analysis = analyze_resume_for_job(candidate, jd_text)
     resume["analysis"] = analysis
+
+    now = datetime.now()
 
     history = evaluation_histories.setdefault(username, [])
     history.insert(
@@ -177,9 +224,22 @@ async def analyze_resume(
             "name": candidate.get("name") or "Unknown",
             "score": analysis["overall_score"],
             "recommendation": analysis["recommendation"],
-            "evaluated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "evaluated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         },
     )
     del history[MAX_HISTORY:]
 
-    return {"analysis": analysis, "history": history}
+    daily_evaluations.setdefault(username, []).append(
+        {
+            "date": now.date().isoformat(),
+            "score": analysis["overall_score"],
+            "recommendation": analysis["recommendation"],
+            "skills": candidate.get("skills") or [],
+        }
+    )
+
+    return {
+        "analysis": analysis,
+        "history": history,
+        "stats": compute_daily_stats(username),
+    }

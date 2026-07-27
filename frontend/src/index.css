@@ -18,6 +18,7 @@
   --lime: #d4ff4f;
   --lime-soft: rgba(212, 255, 79, 0.15);
   --lime-text: #0f1400;
+  --lime-strong: var(--lime);
 
   --danger: #ff6b81;
   --danger-soft: rgba(255, 107, 129, 0.15);
@@ -35,6 +36,30 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme='light'] {
+  --bg: #f7f6fb;
+  --bg-alt: #ffffff;
+  --surface: #ffffffcc;
+  --surface-solid: #ffffff;
+  --surface-hover: #f0eef8;
+  --border: rgba(15, 14, 26, 0.08);
+  --border-strong: rgba(15, 14, 26, 0.16);
+
+  --text: #4a4760;
+  --text-strong: #16151f;
+  --text-dim: #8a869c;
+
+  --danger: #e11d48;
+  --danger-soft: rgba(225, 29, 72, 0.12);
+
+  --lime-strong: #3f7d0a;
+  --lime-soft: rgba(63, 125, 10, 0.12);
+
+  --shadow: rgba(15, 14, 26, 0.12) 0 20px 40px -12px;
+
+  color-scheme: light;
 }
 
 * {

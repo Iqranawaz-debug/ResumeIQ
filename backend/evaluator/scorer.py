@@ -64,27 +64,32 @@ def find_missing_sections(candidate: dict) -> list:
     ]
 
 
+CONTACT_FIELD_POINTS = {"name": 4, "email": 3, "phone": 3}
+
+
 def calculate_score_components(candidate: dict) -> dict:
     """Return (points_earned, max_points) per scoring category."""
     contact_points = sum(
-        10 for field in ("name", "email", "phone") if candidate.get(field)
+        points
+        for field, points in CONTACT_FIELD_POINTS.items()
+        if candidate.get(field)
     )
 
-    skills_points = min(calculate_skills_count(candidate) * 4, 20)
+    skills_points = min(calculate_skills_count(candidate) * 5, 25)
 
-    education_points = 15 if candidate.get("education") else 0
+    education_points = 20 if candidate.get("education") else 0
 
     experience = candidate.get("experience") or []
     experience_points = 0
     if experience:
         total_details = sum(len(entry.get("details") or []) for entry in experience)
-        experience_points = 20 + min(total_details * 2, 15)
+        experience_points = 25 + min(total_details * 2, 20)
 
     return {
-        "contact": (contact_points, 30),
-        "skills": (skills_points, 20),
-        "education": (education_points, 15),
-        "experience": (experience_points, 35),
+        "contact": (contact_points, 10),
+        "skills": (skills_points, 25),
+        "education": (education_points, 20),
+        "experience": (experience_points, 45),
     }
 
 
@@ -100,4 +105,35 @@ def calculate_score_breakdown(candidate: dict) -> dict:
     return {
         category: round(points / max_points * 100)
         for category, (points, max_points) in components.items()
+    }
+
+
+COMMUNICATION_KEYWORDS = [
+    "communication",
+    "presentation",
+    "public speaking",
+    "leadership",
+    "teamwork",
+    "collaboration",
+    "negotiation",
+    "interpersonal",
+]
+
+
+def calculate_radar_scores(candidate: dict, score_breakdown: dict) -> dict:
+    """Score five candidate-strength dimensions (0-100 each) for the
+    strength radar visualization."""
+    skills_text = " ".join(candidate.get("skills") or []).lower()
+    communication_hits = sum(1 for kw in COMMUNICATION_KEYWORDS if kw in skills_text)
+    communication_score = min(communication_hits * 34, 100)
+
+    detected_sections = set(candidate.get("detected_sections") or [])
+    projects_score = 100 if "projects" in detected_sections else 0
+
+    return {
+        "technical_skills": score_breakdown["skills"],
+        "communication": communication_score,
+        "projects": projects_score,
+        "experience": score_breakdown["experience"],
+        "education": score_breakdown["education"],
     }
