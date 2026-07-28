@@ -42,7 +42,16 @@ SECTION_HEADERS = {
         "internships",
     ],
     "projects": ["projects", "project experience", "personal projects", "academic projects"],
-    "certifications": ["certification", "certifications", "licenses & certifications"],
+    "certifications": [
+        "certification",
+        "certifications",
+        "licenses & certifications",
+        "certifications & licenses",
+        "certifications & licences",
+        "licences & certifications",
+        "certifications and licenses",
+        "certifications and licences",
+    ],
     # Recognized only to correctly bound the sections above; their content
     # isn't extracted since the candidate object has no field for them.
     "other": [
@@ -120,13 +129,13 @@ def extract_name(text, email=None):
 
 
 def extract_skills(text, lines, headers):
-    section = _section_lines(lines, headers, "skills")
+    section = _merge_wrapped_list_lines(_section_lines(lines, headers, "skills"))
     skills = []
     for line in section:
         _, _, after_colon = line.partition(":")
         content = after_colon if after_colon else line
         skills.extend(
-            part.strip() for part in re.split(r"[,•|/;]", content) if part.strip()
+            part.strip() for part in re.split(r"[,•·|/;]", content) if part.strip()
         )
 
     if not skills:
@@ -178,9 +187,55 @@ def _is_new_entry(section, index):
     return False
 
 
+SENTENCE_END_PATTERN = re.compile(r"[.!?:;]$")
+
+
 def _merge_wrapped_lines(lines):
     """Rejoin lines that are really the wrapped continuation of the
-    previous sentence (a line starting with a lowercase letter)."""
+    previous PROSE sentence (used for experience bullets) — either because
+    this line starts with a lowercase letter, or because the previous line
+    was left hanging without any sentence-ending punctuation (catches wraps
+    like "...approximately" / "250 students." where the continuation starts
+    with a capital letter or a number and the lowercase check alone would
+    miss it).
+
+    Only safe for prose that's expected to end in terminal punctuation.
+    Comma-separated lists (e.g. skills) never end in periods by nature, so
+    use `_merge_wrapped_list_lines` for those instead — otherwise every
+    list line looks "incomplete" and gets wrongly glued to the next one."""
+WRAP_WIDTH_THRESHOLD = 50
+
+
+def _merge_wrapped_lines(lines):
+    merged = []
+    for line in lines:
+        prev_unterminated = bool(merged) and merged[-1] and not SENTENCE_END_PATTERN.search(merged[-1])
+        # A real wrapped continuation is the leftover tail of a previous
+        # line that got cut off mid-sentence by the page width, so it's
+        # short AND the previous line is itself long (near the wrap
+        # width). A genuine new bullet that simply omits a trailing period
+        # is usually a short, complete, standalone sentence — don't
+        # swallow those into the previous bullet just because neither one
+        # ends in punctuation.
+        looks_like_trailing_fragment = (
+            prev_unterminated
+            and len(line.split()) <= 5
+            and len(merged[-1]) >= WRAP_WIDTH_THRESHOLD
+        )
+        if merged and line and (line[0].islower() or looks_like_trailing_fragment):
+            merged[-1] = f"{merged[-1]} {line}"
+        else:
+            merged.append(line)
+    return merged
+
+
+def _merge_wrapped_list_lines(lines):
+    """Rejoin lines that are the wrapped continuation of a comma/bullet
+    separated list item (used for skills). Only merges when the next line
+    starts with a lowercase letter — list lines legitimately lack terminal
+    punctuation, so the "previous incomplete" heuristic from
+    `_merge_wrapped_lines` would wrongly glue unrelated list lines (e.g. a
+    new "Category:" heading) onto the previous one."""
     merged = []
     for line in lines:
         if merged and line and line[0].islower():

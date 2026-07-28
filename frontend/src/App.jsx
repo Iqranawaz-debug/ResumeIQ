@@ -9,10 +9,17 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001
 const UPLOAD_URL = `${API_BASE_URL}/api/upload`
 const ANALYZE_URL = `${API_BASE_URL}/api/analyze`
 const HISTORY_URL = `${API_BASE_URL}/api/history`
-const STATS_URL = `${API_BASE_URL}/api/stats`
 const LOGOUT_URL = `${API_BASE_URL}/api/logout`
 const ALLOWED_EXTENSIONS = ['pdf', 'docx']
 const MAX_FILE_SIZE_MB = 10
+const TOTAL_STEPS = 4
+
+const STEP_COPY = {
+  1: { eyebrow: 'STEP 1 OF 4', title: 'Upload a resume', subtitle: "Bring a candidate's resume — we'll extract the key details." },
+  2: { eyebrow: 'STEP 2 OF 4', title: 'Resume Information', subtitle: 'Review what we extracted before scoring.' },
+  3: { eyebrow: 'STEP 3 OF 4', title: 'Add a job description', subtitle: 'Optional — add one for a job-fit score, or skip to evaluate the resume alone.' },
+  4: { eyebrow: 'STEP 4 OF 4', title: 'Analysis Result', subtitle: 'Full breakdown, strengths, and recommendation.' },
+}
 
 const RECOMMENDATION_CLASS = {
   'Highly Recommended': 'rec-highly',
@@ -33,24 +40,6 @@ function getExtension(filename) {
   return filename.includes('.') ? filename.split('.').pop().toLowerCase() : ''
 }
 
-const SKILL_CLOUD_MIN_SIZE = 14
-const SKILL_CLOUD_MAX_SIZE = 38
-
-function getSkillCloudSizes(skillCloud) {
-  const counts = Object.values(skillCloud)
-  const min = Math.min(...counts)
-  const max = Math.max(...counts)
-  const sizes = {}
-  for (const [skill, count] of Object.entries(skillCloud)) {
-    sizes[skill] =
-      max === min
-        ? (SKILL_CLOUD_MIN_SIZE + SKILL_CLOUD_MAX_SIZE) / 2
-        : SKILL_CLOUD_MIN_SIZE +
-          ((count - min) / (max - min)) * (SKILL_CLOUD_MAX_SIZE - SKILL_CLOUD_MIN_SIZE)
-  }
-  return sizes
-}
-
 function validateFile(file) {
   const extension = getExtension(file.name)
   if (!ALLOWED_EXTENSIONS.includes(extension)) {
@@ -68,7 +57,10 @@ function validateFile(file) {
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('resumeiq_token'))
   const [username, setUsername] = useState(() => localStorage.getItem('resumeiq_username'))
-  const [theme, setTheme] = useState(() => localStorage.getItem('resumeiq_theme') || 'dark')
+  const [theme, setTheme] = useState(() => localStorage.getItem('resumeiq_theme') || 'light')
+
+  const [activePage, setActivePage] = useState('upload') // upload | history
+  const [currentStep, setCurrentStep] = useState(1)
 
   const [isDragging, setIsDragging] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('idle') // idle | uploading | success | error
@@ -83,7 +75,6 @@ function App() {
   const [analysisMessage, setAnalysisMessage] = useState('')
   const [analysis, setAnalysis] = useState(null)
   const [history, setHistory] = useState([])
-  const [stats, setStats] = useState(null)
   const [uploadedFile, setUploadedFile] = useState(null)
   const [historySearch, setHistorySearch] = useState('')
 
@@ -114,11 +105,6 @@ function App() {
       })
       .then((data) => setHistory(data.history || []))
       .catch(() => {})
-
-    fetch(STATS_URL, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setStats(data))
-      .catch(() => {})
   }, [token])
 
   function handleAuthSuccess(newToken, newUsername) {
@@ -141,12 +127,13 @@ function App() {
     localStorage.removeItem('resumeiq_username')
     setToken(null)
     setUsername(null)
+    setActivePage('upload')
+    setCurrentStep(1)
     setUploadStatus('idle')
     setCandidate(null)
     setAnalysis(null)
     setAnalysisStatus('idle')
     setHistory([])
-    setStats(null)
     setJobDescription('')
     setJdFile(null)
     setUploadedFile(null)
@@ -230,7 +217,7 @@ function App() {
       setAnalysisStatus('success')
       setAnalysis(data.analysis)
       setHistory(data.history || [])
-      setStats(data.stats || null)
+      setCurrentStep(4)
     } catch (err) {
       setAnalysisStatus('error')
       setAnalysisMessage(err.message || 'Could not reach the server.')
@@ -318,517 +305,547 @@ function App() {
     if (file) uploadFile(file)
   }
 
+  function handleStartOver() {
+    setCurrentStep(1)
+    setUploadStatus('idle')
+    setUploadMessage('')
+    setFileName('')
+    setCandidate(null)
+    setUploadedFile(null)
+    setJobDescription('')
+    setJdFile(null)
+    setAnalysis(null)
+    setAnalysisStatus('idle')
+    setAnalysisMessage('')
+  }
+
   const hasJobDescription = jdInputMode === 'text' ? Boolean(jobDescription.trim()) : Boolean(jdFile)
 
   const filteredHistory = history.filter((entry) =>
     (entry.name || '').toLowerCase().includes(historySearch.trim().toLowerCase())
   )
 
+  const step = STEP_COPY[currentStep]
+
   return (
-    <div className="page">
-      <header className="app-header">
-        <div className="brand">
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
           <BrandMark />
-          <span className="brand-name">ResumeIQ</span>
-        </div>
-        <div className="header-user">
+          <div className="sidebar-brand-text">
+            <span className="sidebar-brand-name">ResumeIQ</span>
+            <span className="sidebar-brand-tag">Recruiter workspace</span>
+          </div>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
-          <span className="top-bar-user">Signed in as <strong>{username}</strong></span>
+        </div>
+
+        <nav className="sidebar-nav">
+          <button
+            type="button"
+            className={`sidebar-nav-item ${activePage === 'upload' ? 'active' : ''}`}
+            onClick={() => setActivePage('upload')}
+          >
+            Upload
+          </button>
+          <button
+            type="button"
+            className={`sidebar-nav-item ${activePage === 'history' ? 'active' : ''}`}
+            onClick={() => setActivePage('history')}
+          >
+            History
+          </button>
+        </nav>
+
+        <div className="sidebar-footer">
+          <span className="sidebar-user-email">{username}</span>
           <button type="button" className="link-button" onClick={handleLogout}>
             Log out
           </button>
         </div>
-      </header>
+      </aside>
 
-      <div className="hero">
-        <p className="eyebrow">/ AI RESUME EVALUATOR</p>
-        <h1>Score candidate resumes against your job requirements.</h1>
-        <p className="subtitle">
-          Upload a candidate's resume, add the job description, and get one score
-          and hiring recommendation that accounts for both resume quality and job fit.
-        </p>
-      </div>
+      <main className="main-content">
+        {activePage === 'upload' && (
+          <div className="wizard">
+            <p className="eyebrow">{step.eyebrow}</p>
+            <h1>{step.title}</h1>
+            <p className="subtitle">{step.subtitle}</p>
 
-      {stats && stats.total_resumes > 0 && (
-        <section className="section">
-          <h2 className="section-title">Today's Evaluations</h2>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <span className="stat-card-value">{stats.total_resumes}</span>
-              <span className="stat-card-label">Total Resumes</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card-value">{stats.recommended}</span>
-              <span className="stat-card-label">Recommended</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card-value">{stats.rejected}</span>
-              <span className="stat-card-label">Rejected</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card-value">{stats.average_score}</span>
-              <span className="stat-card-label">Average Score</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-card-value">{stats.top_skill || '—'}</span>
-              <span className="stat-card-label">Top Skill</span>
-            </div>
-          </div>
-        </section>
-      )}
+            {currentStep === 1 && (
+              <div className="wizard-panel">
+                <div
+                  className={`dropzone dropzone-hero ${isDragging ? 'dragging' : ''} ${uploadStatus}`}
+                  onClick={() => inputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setIsDragging(true)
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept=".pdf,.docx"
+                    hidden
+                    onChange={handleFileChange}
+                  />
+                  <span className="dropzone-icon">⬆</span>
+                  <p className="dropzone-text">
+                    Drag &amp; drop a resume here, or <span className="dropzone-link">browse files</span>
+                  </p>
+                  <p className="dropzone-hint">PDF or DOCX, up to {MAX_FILE_SIZE_MB}MB</p>
+                </div>
 
-      <section className="section">
-        <h2 className="section-title"><span className="step-index">01</span> Upload Resume</h2>
+                {uploadStatus === 'uploading' && <p className="status uploading">Uploading...</p>}
+                {uploadStatus === 'success' && (
+                  <p className="status success">
+                    {uploadMessage} <strong>({fileName})</strong>
+                  </p>
+                )}
+                {uploadStatus === 'error' && <p className="status error">{uploadMessage}</p>}
 
-        <div
-          className={`dropzone ${isDragging ? 'dragging' : ''} ${uploadStatus}`}
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setIsDragging(true)
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.docx"
-            hidden
-            onChange={handleFileChange}
-          />
-          <p className="dropzone-text">
-            Drag & drop your resume here, or click to browse
-          </p>
-          <p className="dropzone-hint">PDF or DOCX, max {MAX_FILE_SIZE_MB}MB</p>
-        </div>
+                <p className="wizard-note">We only read the file to extract text — nothing is stored beyond this session.</p>
 
-        {uploadStatus === 'uploading' && <p className="status uploading">Uploading...</p>}
-        {uploadStatus === 'success' && (
-          <p className="status success">
-            {uploadMessage} <strong>({fileName})</strong>
-          </p>
-        )}
-        {uploadStatus === 'error' && <p className="status error">{uploadMessage}</p>}
-      </section>
-
-      {candidate && (
-        <section className="section">
-          <h2 className="section-title">
-            <span className="step-index">02</span> Resume Information
-            {uploadedFile && (
-              <button
-                type="button"
-                className="link-button section-action"
-                onClick={handleViewResume}
-              >
-                View Uploaded File
-              </button>
+                <div className="wizard-actions">
+                  <button
+                    type="button"
+                    className="evaluate-button"
+                    disabled={!candidate}
+                    onClick={() => setCurrentStep(2)}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
             )}
-          </h2>
-          <div className="candidate-card">
-            <p><strong>Name:</strong> {candidate.name || 'Not found'}</p>
-            <p><strong>Email:</strong> {candidate.email || 'Not found'}</p>
-            <p><strong>Phone:</strong> {candidate.phone || 'Not found'}</p>
 
-            <p className="field-label"><strong>Skills</strong></p>
-            {candidate.skills.length > 0 ? (
-              candidate.skills_by_category ? (
-                <div className="skill-categories">
-                  {Object.entries(candidate.skills_by_category).map(([category, skills]) => (
-                    <div className="skill-category" key={category}>
-                      <p className="skill-category-title">{category}</p>
+            {currentStep === 2 && candidate && (
+              <div className="wizard-panel">
+                <div className="candidate-card">
+                  <div className="candidate-card-header">
+                    {uploadedFile && (
+                      <button type="button" className="link-button" onClick={handleViewResume}>
+                        View Uploaded File
+                      </button>
+                    )}
+                  </div>
+                  <p><strong>Name:</strong> {candidate.name || 'Not found'}</p>
+                  <p><strong>Email:</strong> {candidate.email || 'Not found'}</p>
+                  <p><strong>Phone:</strong> {candidate.phone || 'Not found'}</p>
+
+                  <p className="field-label"><strong>Skills</strong></p>
+                  {candidate.skills.length > 0 ? (
+                    candidate.skills_by_category ? (
+                      <div className="skill-categories">
+                        {Object.entries(candidate.skills_by_category).map(([category, skills]) => (
+                          <div className="skill-category" key={category}>
+                            <p className="skill-category-title">{category}</p>
+                            <ul className="skill-list">
+                              {skills.map((skill) => (
+                                <li key={skill}>{skill}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
                       <ul className="skill-list">
-                        {skills.map((skill) => (
+                        {candidate.skills.map((skill) => (
                           <li key={skill}>{skill}</li>
                         ))}
                       </ul>
-                    </div>
-                  ))}
+                    )
+                  ) : (
+                    <p className="not-found">Not found</p>
+                  )}
+
+                  <p className="field-label"><strong>Education</strong></p>
+                  {candidate.education.length > 0 ? (
+                    <ul>
+                      {candidate.education.map((entry, i) => (
+                        <li key={i}>{entry}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="not-found">Not found</p>
+                  )}
+
+                  <p className="field-label"><strong>Experience</strong></p>
+                  {candidate.experience.length > 0 ? (
+                    <ul className="experience-list">
+                      {candidate.experience.map((exp, i) => (
+                        <li key={i}>
+                          <div className="experience-title">
+                            {exp.title}
+                            {exp.duration ? ` (${exp.duration})` : ''}
+                          </div>
+                          {exp.details.length > 0 && (
+                            <ul>
+                              {exp.details.map((detail, j) => (
+                                <li key={j}>{detail}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="not-found">Not found</p>
+                  )}
                 </div>
-              ) : (
-                <ul className="skill-list">
-                  {candidate.skills.map((skill) => (
-                    <li key={skill}>{skill}</li>
-                  ))}
-                </ul>
-              )
-            ) : (
-              <p className="not-found">Not found</p>
-            )}
 
-            {candidate.skill_cloud && Object.keys(candidate.skill_cloud).length > 0 && (
-              <>
-                <p className="field-label"><strong>Skill Cloud</strong></p>
-                <div className="skill-cloud">
-                  {Object.entries(getSkillCloudSizes(candidate.skill_cloud)).map(([skill, size]) => (
-                    <span key={skill} className="skill-cloud-word" style={{ fontSize: `${size}px` }}>
-                      {skill}
-                    </span>
-                  ))}
+                <div className="wizard-actions">
+                  <button type="button" className="link-button" onClick={() => setCurrentStep(1)}>
+                    Back
+                  </button>
+                  <button type="button" className="evaluate-button" onClick={() => setCurrentStep(3)}>
+                    Continue
+                  </button>
                 </div>
-              </>
+              </div>
             )}
 
-            <p className="field-label"><strong>Education</strong></p>
-            {candidate.education.length > 0 ? (
-              <ul>
-                {candidate.education.map((entry, i) => (
-                  <li key={i}>{entry}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="not-found">Not found</p>
-            )}
+            {currentStep === 3 && candidate && (
+              <div className="wizard-panel">
+                <div className="candidate-card">
+                  <p className="dropzone-hint" style={{ marginBottom: 10 }}>
+                    Add a job description to also get a job-fit score against a specific
+                    role — or skip it and evaluate the resume on its own.
+                  </p>
 
-            <p className="field-label"><strong>Experience</strong></p>
-            {candidate.experience.length > 0 ? (
-              <ul className="experience-list">
-                {candidate.experience.map((exp, i) => (
-                  <li key={i}>
-                    <div className="experience-title">
-                      {exp.title}
-                      {exp.duration ? ` (${exp.duration})` : ''}
+                  <div className="jd-mode-toggle">
+                    <button
+                      type="button"
+                      className={`jd-mode-button ${jdInputMode === 'text' ? 'active' : ''}`}
+                      onClick={() => setJdInputMode('text')}
+                    >
+                      Paste Text
+                    </button>
+                    <button
+                      type="button"
+                      className={`jd-mode-button ${jdInputMode === 'file' ? 'active' : ''}`}
+                      onClick={() => setJdInputMode('file')}
+                    >
+                      Upload File
+                    </button>
+                  </div>
+
+                  {jdInputMode === 'text' ? (
+                    <textarea
+                      className="job-description-input"
+                      placeholder="Paste the job description here..."
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value)}
+                      rows={6}
+                    />
+                  ) : (
+                    <div
+                      className="dropzone jd-dropzone"
+                      onClick={() => jdFileRef.current?.click()}
+                    >
+                      <input
+                        ref={jdFileRef}
+                        type="file"
+                        accept=".pdf,.docx,.txt"
+                        hidden
+                        onChange={(e) => setJdFile(e.target.files?.[0] || null)}
+                      />
+                      <p className="dropzone-text">
+                        {jdFile ? jdFile.name : 'Click to upload the job description'}
+                      </p>
+                      <p className="dropzone-hint">PDF, DOCX, or TXT</p>
                     </div>
-                    {exp.details.length > 0 && (
-                      <ul>
-                        {exp.details.map((detail, j) => (
-                          <li key={j}>{detail}</li>
+                  )}
+
+                  {analysisStatus === 'error' && <p className="status error">{analysisMessage}</p>}
+                </div>
+
+                <div className="wizard-actions">
+                  <button type="button" className="link-button" onClick={() => setCurrentStep(2)}>
+                    Back
+                  </button>
+                  <button
+                    className="evaluate-button"
+                    disabled={analysisStatus === 'analyzing'}
+                    onClick={handleAnalyze}
+                  >
+                    {analysisStatus === 'analyzing'
+                      ? 'Analyzing...'
+                      : hasJobDescription
+                        ? 'Analyze Against Job Description'
+                        : 'Evaluate Resume Only'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {currentStep === 4 && analysis && (
+              <div className="wizard-panel">
+                <div className="evaluation-card">
+                  <div className="candidate-card-header">
+                    <button type="button" className="link-button" onClick={handleDownloadRecommendation}>
+                      Download Recommendation
+                    </button>
+                  </div>
+                  <div className="score-row">
+                    <div className="score-ring" style={{ '--score': analysis.overall_score }}>
+                      <div className="score-ring-inner">
+                        <span className="score-number">{analysis.overall_score}</span>
+                        <span className="score-max">/ 100</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className={`recommendation-badge ${RECOMMENDATION_CLASS[analysis.recommendation] || ''}`}>
+                        {analysis.recommendation}
+                      </p>
+                      <p className="experience-level">{analysis.experience_level}</p>
+                    </div>
+                  </div>
+
+                  {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
+                    <>
+                      <div className="breakdown">
+                        <div className="breakdown-row">
+                          <span className="breakdown-label">resume quality</span>
+                          <div className="breakdown-track">
+                            <div className="breakdown-fill" style={{ width: `${analysis.resume_quality_score}%` }} />
+                          </div>
+                          <span className="breakdown-value">{analysis.resume_quality_score}%</span>
+                        </div>
+                        <div className="breakdown-row">
+                          <span className="breakdown-label">job fit</span>
+                          <div className="breakdown-track">
+                            <div className="breakdown-fill" style={{ width: `${analysis.job_fit_score}%` }} />
+                          </div>
+                          <span className="breakdown-value">{analysis.job_fit_score}%</span>
+                        </div>
+                      </div>
+
+                      <p className="field-label"><strong>Score Comparison</strong></p>
+                      <div className="table-scroll">
+                        <table className="history-table comparison-table">
+                          <thead>
+                            <tr>
+                              <th>Score Type</th>
+                              <th>Score</th>
+                              <th>Verdict</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td>Resume Quality</td>
+                              <td>{analysis.resume_quality_score} / 100</td>
+                              <td>{analysis.resume_only_recommendation}</td>
+                            </tr>
+                            <tr>
+                              <td>Job Description Match</td>
+                              <td>{analysis.job_fit_score} / 100</td>
+                              <td>{analysis.job_fit_label}</td>
+                            </tr>
+                            <tr className="comparison-final-row">
+                              <td>Overall Score</td>
+                              <td>{analysis.overall_score} / 100</td>
+                              <td>{analysis.recommendation}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="comparison-formula">
+                        Overall Score = Resume Quality (30%) + Job Description Match (70%)
+                      </p>
+                    </>
+                  )}
+
+                  <div className="eval-stats">
+                    <div>
+                      <span className="stat-value">{analysis.skills_count}</span>
+                      <span className="stat-label">Skills</span>
+                    </div>
+                    <div>
+                      <span className="stat-value">{analysis.total_experience_years}</span>
+                      <span className="stat-label">Years Experience</span>
+                    </div>
+                    <div>
+                      <span className="stat-value">{analysis.missing_sections.length}</span>
+                      <span className="stat-label">Missing Sections</span>
+                    </div>
+                  </div>
+
+                  {analysis.missing_sections.length > 0 && (
+                    <div className="field-label">
+                      <strong>Missing:</strong> {analysis.missing_sections.join(', ')}
+                    </div>
+                  )}
+
+                  {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
+                    <>
+                      {analysis.matched_skills.length === 0 && analysis.missing_skills.length === 0 ? (
+                        <>
+                          <p className="field-label"><strong>Skill Match</strong></p>
+                          <p className="not-found">
+                            No specific skills could be identified in this job description to compare
+                            against the resume.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="field-label"><strong>Matched Skills</strong></p>
+                          {analysis.matched_skills.length > 0 ? (
+                            <ul className="skill-list">
+                              {analysis.matched_skills.map((skill) => (
+                                <li key={skill}>{skill}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="not-found">None of the required skills were found on the resume</p>
+                          )}
+
+                          <p className="field-label"><strong>Missing Skills</strong></p>
+                          {analysis.missing_skills.length > 0 ? (
+                            <ul className="skill-list skill-list-missing">
+                              {analysis.missing_skills.map((skill) => (
+                                <li key={skill}>{skill}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="not-found">None &mdash; all required skills found</p>
+                          )}
+                        </>
+                      )}
+
+                      <p className="field-label">{analysis.experience_note}</p>
+                      <p className="field-label">{analysis.education_note}</p>
+                    </>
+                  )}
+
+                  {analysis.radar && (
+                    <>
+                      <p className="field-label"><strong>Candidate Strength Radar</strong></p>
+                      <div className="breakdown radar-breakdown">
+                        {RADAR_LABELS.map(({ key, label }) => (
+                          <div className="breakdown-row" key={key}>
+                            <span className="breakdown-label">{label}</span>
+                            <div className="breakdown-track">
+                              <div className="breakdown-fill" style={{ width: `${analysis.radar[key]}%` }} />
+                            </div>
+                            <span className="breakdown-value">{analysis.radar[key]}%</span>
+                          </div>
                         ))}
-                      </ul>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="not-found">Not found</p>
-            )}
-          </div>
-        </section>
-      )}
+                      </div>
+                    </>
+                  )}
 
-      {candidate && (
-        <section className="section">
-          <h2 className="section-title">
-            <span className="step-index">03</span> Add Job Description
-            <span className="section-title-hint">optional</span>
-          </h2>
-          <div className="candidate-card">
-            <p className="dropzone-hint" style={{ marginBottom: 10 }}>
-              Add a job description to also get a job-fit score against a specific
-              role — or skip it and evaluate the resume on its own.
-            </p>
+                  <p className="field-label"><strong>Strengths</strong></p>
+                  {analysis.strengths.length > 0 ? (
+                    <ul>
+                      {analysis.strengths.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="not-found">None identified</p>
+                  )}
 
-            <div className="jd-mode-toggle">
-              <button
-                type="button"
-                className={`jd-mode-button ${jdInputMode === 'text' ? 'active' : ''}`}
-                onClick={() => setJdInputMode('text')}
-              >
-                Paste Text
-              </button>
-              <button
-                type="button"
-                className={`jd-mode-button ${jdInputMode === 'file' ? 'active' : ''}`}
-                onClick={() => setJdInputMode('file')}
-              >
-                Upload File
-              </button>
-            </div>
+                  <p className="field-label"><strong>Weaknesses</strong></p>
+                  {analysis.weaknesses && analysis.weaknesses.length > 0 ? (
+                    <ul>
+                      {analysis.weaknesses.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="not-found">None identified</p>
+                  )}
 
-            {jdInputMode === 'text' ? (
-              <textarea
-                className="job-description-input"
-                placeholder="Paste the job description here..."
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                rows={6}
-              />
-            ) : (
-              <div
-                className="dropzone jd-dropzone"
-                onClick={() => jdFileRef.current?.click()}
-              >
-                <input
-                  ref={jdFileRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  hidden
-                  onChange={(e) => setJdFile(e.target.files?.[0] || null)}
-                />
-                <p className="dropzone-text">
-                  {jdFile ? jdFile.name : 'Click to upload the job description'}
-                </p>
-                <p className="dropzone-hint">PDF, DOCX, or TXT</p>
-              </div>
-            )}
+                  <p className="field-label"><strong>Suggestions</strong></p>
+                  <ul>
+                    {analysis.suggestions.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
 
-            <button
-              className="evaluate-button"
-              disabled={analysisStatus === 'analyzing'}
-              onClick={handleAnalyze}
-            >
-              {analysisStatus === 'analyzing'
-                ? 'Analyzing...'
-                : hasJobDescription
-                  ? 'Analyze Against Job Description'
-                  : 'Evaluate Resume Only'}
-            </button>
-            {analysisStatus === 'error' && <p className="status error">{analysisMessage}</p>}
-          </div>
-        </section>
-      )}
+                  <p className="field-label"><strong>Suggested Interview Questions</strong></p>
+                  {analysis.interview_questions && analysis.interview_questions.length > 0 ? (
+                    <ol>
+                      {analysis.interview_questions.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="not-found">None generated</p>
+                  )}
 
-      {analysis && (
-        <section className="section">
-          <h2 className="section-title">
-            <span className="step-index">04</span> Analysis Result
-            <button
-              type="button"
-              className="link-button section-action"
-              onClick={handleDownloadRecommendation}
-            >
-              Download Recommendation
-            </button>
-          </h2>
-          <div className="evaluation-card">
-            <div className="score-row">
-              <div className="score-ring" style={{ '--score': analysis.overall_score }}>
-                <div className="score-ring-inner">
-                  <span className="score-number">{analysis.overall_score}</span>
-                  <span className="score-max">/ 100</span>
+                  <button type="button" className="evaluate-button print-report-button" onClick={() => window.print()}>
+                    Generate Full Report (PDF)
+                  </button>
+                </div>
+
+                <div className="wizard-actions">
+                  <button type="button" className="link-button" onClick={() => setCurrentStep(3)}>
+                    Back
+                  </button>
+                  <button type="button" className="evaluate-button" onClick={handleStartOver}>
+                    Evaluate Another Resume
+                  </button>
                 </div>
               </div>
-              <div>
-                <p className={`recommendation-badge ${RECOMMENDATION_CLASS[analysis.recommendation] || ''}`}>
-                  {analysis.recommendation}
-                </p>
-                <p className="experience-level">{analysis.experience_level}</p>
-              </div>
-            </div>
+            )}
+          </div>
+        )}
 
-            {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
+        {activePage === 'history' && (
+          <div className="wizard">
+            <p className="eyebrow">/ HISTORY</p>
+            <h1>Evaluation History</h1>
+            <p className="subtitle">Your last {history.length} evaluation{history.length === 1 ? '' : 's'}.</p>
+
+            {history.length > 0 ? (
               <>
-                <div className="breakdown">
-                  <div className="breakdown-row">
-                    <span className="breakdown-label">resume quality</span>
-                    <div className="breakdown-track">
-                      <div className="breakdown-fill" style={{ width: `${analysis.resume_quality_score}%` }} />
-                    </div>
-                    <span className="breakdown-value">{analysis.resume_quality_score}%</span>
-                  </div>
-                  <div className="breakdown-row">
-                    <span className="breakdown-label">job fit</span>
-                    <div className="breakdown-track">
-                      <div className="breakdown-fill" style={{ width: `${analysis.job_fit_score}%` }} />
-                    </div>
-                    <span className="breakdown-value">{analysis.job_fit_score}%</span>
-                  </div>
-                </div>
-
-                <p className="field-label"><strong>Score Comparison</strong></p>
+                <input
+                  type="text"
+                  className="history-search"
+                  placeholder="Search by candidate name..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                />
                 <div className="table-scroll">
-                  <table className="history-table comparison-table">
+                  <table className="history-table">
                     <thead>
                       <tr>
-                        <th>Basis</th>
+                        <th>Name</th>
                         <th>Score</th>
-                        <th>Result</th>
+                        <th>Recommendation</th>
+                        <th>Time</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td>Resume only</td>
-                        <td>{analysis.resume_quality_score} / 100</td>
-                        <td>{analysis.resume_only_recommendation}</td>
-                      </tr>
-                      <tr>
-                        <td>Job description match</td>
-                        <td>{analysis.job_fit_score} / 100</td>
-                        <td>{analysis.job_fit_label}</td>
-                      </tr>
-                      <tr>
-                        <td>Combined (overall)</td>
-                        <td>{analysis.overall_score} / 100</td>
-                        <td>{analysis.recommendation}</td>
-                      </tr>
+                      {filteredHistory.length > 0 ? (
+                        filteredHistory.map((entry, i) => (
+                          <tr key={i}>
+                            <td>{entry.name}</td>
+                            <td>{entry.score}</td>
+                            <td>{entry.recommendation}</td>
+                            <td>{entry.evaluated_at}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="not-found">
+                            No evaluations match "{historySearch}"
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
               </>
-            )}
-
-            <div className="eval-stats">
-              <div>
-                <span className="stat-value">{analysis.skills_count}</span>
-                <span className="stat-label">Skills</span>
-              </div>
-              <div>
-                <span className="stat-value">{analysis.total_experience_years}</span>
-                <span className="stat-label">Years Experience</span>
-              </div>
-              <div>
-                <span className="stat-value">{analysis.missing_sections.length}</span>
-                <span className="stat-label">Missing Sections</span>
-              </div>
-            </div>
-
-            {analysis.missing_sections.length > 0 && (
-              <div className="field-label">
-                <strong>Missing:</strong> {analysis.missing_sections.join(', ')}
-              </div>
-            )}
-
-            {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
-              <>
-                {analysis.matched_skills.length === 0 && analysis.missing_skills.length === 0 ? (
-                  <>
-                    <p className="field-label"><strong>Skill Match</strong></p>
-                    <p className="not-found">
-                      No specific skills could be identified in this job description to compare
-                      against the resume.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="field-label"><strong>Matched Skills</strong></p>
-                    {analysis.matched_skills.length > 0 ? (
-                      <ul className="skill-list">
-                        {analysis.matched_skills.map((skill) => (
-                          <li key={skill}>{skill}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="not-found">None of the required skills were found on the resume</p>
-                    )}
-
-                    <p className="field-label"><strong>Missing Skills</strong></p>
-                    {analysis.missing_skills.length > 0 ? (
-                      <ul className="skill-list skill-list-missing">
-                        {analysis.missing_skills.map((skill) => (
-                          <li key={skill}>{skill}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="not-found">None &mdash; all required skills found</p>
-                    )}
-                  </>
-                )}
-
-                <p className="field-label">{analysis.experience_note}</p>
-                <p className="field-label">{analysis.education_note}</p>
-              </>
-            )}
-
-            {analysis.radar && (
-              <>
-                <p className="field-label"><strong>Candidate Strength Radar</strong></p>
-                <div className="breakdown radar-breakdown">
-                  {RADAR_LABELS.map(({ key, label }) => (
-                    <div className="breakdown-row" key={key}>
-                      <span className="breakdown-label">{label}</span>
-                      <div className="breakdown-track">
-                        <div className="breakdown-fill" style={{ width: `${analysis.radar[key]}%` }} />
-                      </div>
-                      <span className="breakdown-value">{analysis.radar[key]}%</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            <p className="field-label"><strong>Strengths</strong></p>
-            {analysis.strengths.length > 0 ? (
-              <ul>
-                {analysis.strengths.map((item, i) => (
-                  <li key={i}>{item}</li>
-                ))}
-              </ul>
             ) : (
-              <p className="not-found">None identified</p>
+              <p className="not-found">No evaluations yet — head to Upload to get started.</p>
             )}
-
-            <p className="field-label"><strong>Weaknesses</strong></p>
-            {analysis.weaknesses && analysis.weaknesses.length > 0 ? (
-              <ul>
-                {analysis.weaknesses.map((item, i) => (
-                  <li key={i}>{item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="not-found">None identified</p>
-            )}
-
-            <p className="field-label"><strong>Suggestions</strong></p>
-            <ul>
-              {analysis.suggestions.map((item, i) => (
-                <li key={i}>{item}</li>
-              ))}
-            </ul>
-
-            <p className="field-label"><strong>Suggested Interview Questions</strong></p>
-            {analysis.interview_questions && analysis.interview_questions.length > 0 ? (
-              <ol>
-                {analysis.interview_questions.map((item, i) => (
-                  <li key={i}>{item}</li>
-                ))}
-              </ol>
-            ) : (
-              <p className="not-found">None generated</p>
-            )}
-
-            <button type="button" className="evaluate-button print-report-button" onClick={() => window.print()}>
-              Generate Full Report (PDF)
-            </button>
           </div>
-        </section>
-      )}
-
-      {history.length > 0 && (
-        <section className="section">
-          <h2 className="section-title">
-            <span className="step-index">05</span> Evaluation History
-            <span className="section-title-hint">last {history.length}</span>
-          </h2>
-          <input
-            type="text"
-            className="history-search"
-            placeholder="Search by candidate name..."
-            value={historySearch}
-            onChange={(e) => setHistorySearch(e.target.value)}
-          />
-          <div className="table-scroll">
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Score</th>
-                  <th>Recommendation</th>
-                  <th>Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredHistory.length > 0 ? (
-                  filteredHistory.map((entry, i) => (
-                    <tr key={i}>
-                      <td>{entry.name}</td>
-                      <td>{entry.score}</td>
-                      <td>{entry.recommendation}</td>
-                      <td>{entry.evaluated_at}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="not-found">
-                      No evaluations match "{historySearch}"
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+        )}
+      </main>
 
       <PrintableReport candidate={candidate} analysis={analysis} />
     </div>

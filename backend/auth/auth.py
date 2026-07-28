@@ -36,7 +36,7 @@ def _hash_password(password: str, salt: str) -> str:
     ).hex()
 
 
-def create_user(email: str, password: str) -> None:
+def create_user(email: str, password: str, full_name: str = "", company: str = "") -> None:
     email = email.strip().lower()
     if not email or not password:
         raise AuthError("Email and password are required.")
@@ -49,6 +49,8 @@ def create_user(email: str, password: str) -> None:
     users[email] = {
         "salt": salt,
         "password_hash": _hash_password(password, salt),
+        "full_name": full_name.strip(),
+        "company": company.strip(),
     }
     _save_users()
 

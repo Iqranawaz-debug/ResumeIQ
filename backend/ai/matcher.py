@@ -49,7 +49,7 @@ def match_resume_to_job_ai(candidate: dict, job_description: str) -> dict:
     client = get_client()
     completion = client.chat.completions.create(
         model=MODEL,
-        max_tokens=1200,
+        max_tokens=2500,
         response_format={"type": "json_object"},
         messages=[
             {

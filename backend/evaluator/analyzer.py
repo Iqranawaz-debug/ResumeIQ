@@ -5,8 +5,8 @@ from evaluator.recommendation import generate_interview_questions
 from evaluator.scorer import determine_recommendation
 from matcher.matcher import match_resume_to_job
 
-RESUME_QUALITY_WEIGHT = 0.4
-JOB_FIT_WEIGHT = 0.6
+RESUME_QUALITY_WEIGHT = 0.3
+JOB_FIT_WEIGHT = 0.7
 
 
 def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
@@ -55,6 +55,15 @@ def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
         general_eval["resume_score"] * RESUME_QUALITY_WEIGHT
         + job_match["overall_score"] * JOB_FIT_WEIGHT
     )
+
+    # A confirmed weak job fit should never be rescued by a polished resume —
+    # a great resume for the wrong role is still the wrong role. Without this,
+    # a high resume-quality score could blend a "Weak Match" job fit up past
+    # the "Consider" threshold, which is exactly backwards for a tool whose
+    # purpose is judging fit for a specific job.
+    if job_match["match_label"] == "Weak Match":
+        overall_score = min(overall_score, 49)
+
     recommendation = determine_recommendation(overall_score)
 
     if job_fit_method == "ai" and job_match.get("strengths") and job_match.get("suggestions"):

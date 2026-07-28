@@ -25,6 +25,15 @@ class AIRequirements(BaseModel):
     degree_required: bool = False
 
 
+class AISkillCategoryGroup(BaseModel):
+    category: str
+    skills: list[str] = []
+
+
+class AISkillCategorization(BaseModel):
+    groups: list[AISkillCategoryGroup] = []
+
+
 class AIMatchResult(BaseModel):
     requirements: AIRequirements
     overall_score: int

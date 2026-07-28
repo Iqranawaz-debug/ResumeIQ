@@ -64,9 +64,8 @@ def match_resume_to_job(candidate: dict, job_description: str) -> dict:
 
     matched_skills = [skill for skill in job_skills if skill.lower() in resume_skills_lower]
     missing_skills = [skill for skill in job_skills if skill.lower() not in resume_skills_lower]
-    skills_score = (
-        round(len(matched_skills) / len(job_skills) * 100) if job_skills else 100
-    )
+    skills_detected = bool(job_skills)
+    skills_score = round(len(matched_skills) / len(job_skills) * 100) if skills_detected else 0
 
     required_years = extract_required_years(job_description)
     candidate_years = calculate_total_experience_years(candidate)
@@ -92,9 +91,22 @@ def match_resume_to_job(candidate: dict, job_description: str) -> dict:
         education_score = 0
         education_note = "The job description mentions a degree requirement, but no education was found on the resume."
 
-    overall_score = round(
-        skills_score * 0.6 + experience_score * 0.25 + education_score * 0.15
-    )
+    if skills_detected:
+        overall_score = round(
+            skills_score * 0.6 + experience_score * 0.25 + education_score * 0.15
+        )
+    else:
+        # No required skills could be detected at all — our keyword
+        # vocabulary doesn't cover this job's domain. experience_score and
+        # education_score are unreliable signals here too: they only check
+        # generic presence ("has *a* degree", "has *enough* years"), not
+        # whether that degree/experience is actually relevant to this role,
+        # so they can't be trusted to rescue the score. Cap the whole job-fit
+        # score low instead of blending in those inflated defaults — this is
+        # what previously let a completely wrong-domain candidate (e.g. a
+        # software engineer resume against a nursing job) still land on
+        # "Recommended" once experience/education padded the blend back up.
+        overall_score = 35
 
     return {
         "overall_score": overall_score,

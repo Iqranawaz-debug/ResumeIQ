@@ -6,8 +6,21 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001
 const SIGNUP_URL = `${API_BASE_URL}/api/signup`
 const LOGIN_URL = `${API_BASE_URL}/api/login`
 
+const BRAND_COPY = {
+  login: {
+    headline: 'Screen resumes in seconds, not hours.',
+    copy: 'Sign in to pick up where you left off — your recent evaluations are waiting.',
+  },
+  signup: {
+    headline: 'Give every candidate a fair, fast read.',
+    copy: 'ResumeIQ turns a stack of resumes into clear, screener-friendly summaries.',
+  },
+}
+
 function Auth({ onAuthSuccess, theme, onToggleTheme }) {
   const [mode, setMode] = useState('login') // login | signup
+  const [fullName, setFullName] = useState('')
+  const [company, setCompany] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -19,12 +32,16 @@ function Auth({ onAuthSuccess, theme, onToggleTheme }) {
     setSubmitting(true)
 
     const url = mode === 'login' ? LOGIN_URL : SIGNUP_URL
+    const body =
+      mode === 'login'
+        ? { email, password }
+        : { email, password, full_name: fullName, company }
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(body),
       })
       const data = await response.json()
 
@@ -45,70 +62,35 @@ function Auth({ onAuthSuccess, theme, onToggleTheme }) {
     setError('')
   }
 
+  const brand = BRAND_COPY[mode]
+
   return (
     <div className="auth-page">
-      <div className="auth-panel auth-panel-brand">
-        <div className="auth-brand-row">
-          <div className="brand">
-            <BrandMark />
-            <span className="brand-name">ResumeIQ</span>
-          </div>
-          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-        </div>
-
-        <h1 className="auth-headline">
-          Screen every candidate resume in seconds, not hours.
-        </h1>
-        <p className="auth-copy">
-          AI-powered scoring across contact info, skills, education, and
-          experience — with a hiring recommendation in seconds.
-        </p>
-
-        <div className="auth-preview-card">
-          <div className="score-row">
-            <div className="score-ring" style={{ '--score': 82 }}>
-              <div className="score-ring-inner">
-                <span className="score-number">82</span>
-                <span className="score-max">/ 100</span>
-              </div>
-            </div>
-            <div>
-              <p className="recommendation-badge rec-highly">Highly Recommended</p>
-              <p className="experience-level">Senior</p>
-            </div>
-          </div>
-          <div className="breakdown">
-            <div className="breakdown-row">
-              <span className="breakdown-label">skills</span>
-              <div className="breakdown-track">
-                <div className="breakdown-fill" style={{ width: '80%' }} />
-              </div>
-              <span className="breakdown-value">80%</span>
-            </div>
-            <div className="breakdown-row">
-              <span className="breakdown-label">experience</span>
-              <div className="breakdown-track">
-                <div className="breakdown-fill" style={{ width: '100%' }} />
-              </div>
-              <span className="breakdown-value">100%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="auth-panel auth-panel-form">
         <div className="auth-form-wrap">
-          <p className="eyebrow">{mode === 'login' ? '/ SIGN IN' : '/ CREATE ACCOUNT'}</p>
-          <h2>{mode === 'login' ? 'Welcome back' : 'Get started'}</h2>
+          <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
           <p className="auth-subtitle">
-            {mode === 'login'
-              ? 'Sign in to continue scoring resumes.'
-              : 'Create an account to start scoring resumes.'}
+            {mode === 'login' ? 'New here? ' : 'Already have an account? '}
+            <button type="button" className="link-button" onClick={toggleMode}>
+              {mode === 'login' ? 'Create an account' : 'Sign in'}
+            </button>
           </p>
 
           <form className="auth-form" onSubmit={handleSubmit}>
+            {mode === 'signup' && (
+              <label>
+                Full name
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+              </label>
+            )}
+
             <label>
-              Email
+              Work email
               <input
                 type="email"
                 value={email}
@@ -116,6 +98,17 @@ function Auth({ onAuthSuccess, theme, onToggleTheme }) {
                 required
               />
             </label>
+
+            {mode === 'signup' && (
+              <label>
+                Company
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                />
+              </label>
+            )}
 
             <label>
               Password
@@ -126,21 +119,59 @@ function Auth({ onAuthSuccess, theme, onToggleTheme }) {
                 required
                 minLength={6}
               />
+              <span className="auth-input-hint">At least 6 characters</span>
             </label>
 
             {error && <p className="status error">{error}</p>}
 
             <button className="evaluate-button auth-submit" type="submit" disabled={submitting}>
-              {submitting ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Sign Up'}
+              {submitting ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
             </button>
           </form>
+        </div>
+      </div>
 
-          <p className="auth-toggle">
-            {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-            <button type="button" className="link-button" onClick={toggleMode}>
-              {mode === 'login' ? 'Sign Up' : 'Sign In'}
-            </button>
-          </p>
+      <div className="auth-panel auth-panel-brand">
+        <div className="auth-brand-row">
+          <div className="brand">
+            <BrandMark />
+            <span className="brand-name">ResumeIQ</span>
+          </div>
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        </div>
+
+        <h1 className="auth-headline">{brand.headline}</h1>
+        <p className="auth-copy">{brand.copy}</p>
+
+        <div className="auth-preview-card">
+          <div className="score-row">
+            <div className="score-ring" style={{ '--score': 92 }}>
+              <div className="score-ring-inner">
+                <span className="score-number">92</span>
+                <span className="score-max">/ 100</span>
+              </div>
+            </div>
+            <div>
+              <p className="recommendation-badge rec-highly">Highly Recommended</p>
+              <p className="experience-level">Sarah Chen · Senior PM</p>
+            </div>
+          </div>
+          <div className="breakdown">
+            <div className="breakdown-row">
+              <span className="breakdown-label">skills</span>
+              <div className="breakdown-track">
+                <div className="breakdown-fill" style={{ width: '90%' }} />
+              </div>
+              <span className="breakdown-value">90%</span>
+            </div>
+            <div className="breakdown-row">
+              <span className="breakdown-label">experience</span>
+              <div className="breakdown-track">
+                <div className="breakdown-fill" style={{ width: '100%' }} />
+              </div>
+              <span className="breakdown-value">100%</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
