@@ -23,7 +23,7 @@ async def read_upload(file, allowed, maximum):
 
 def validate_format(extension, content):
     if extension == "pdf" and not content.startswith(b"%PDF-"):
-        raise ValueError("File is not a PDF document.")
+        raise limits.UnreadableDocument("This file is not a valid PDF. Re-export it as PDF or upload a DOCX instead.")
     if extension == "docx":
         try:
             with ZipFile(BytesIO(content)) as archive:
@@ -31,8 +31,8 @@ def validate_format(extension, content):
                 if len(entries) > limits.ZIP_ENTRIES or sum(e.file_size for e in entries) > limits.ZIP_BYTES:
                     raise limits.DocumentLimitError("DOCX expanded content exceeds the configured limit.")
                 if any(e.flag_bits & 1 for e in entries):
-                    raise ValueError("Encrypted DOCX files are unsupported.")
+                    raise limits.UnreadableDocument("Encrypted (password-protected) DOCX files are not supported. Remove the password and upload it again.")
                 if not {"[Content_Types].xml", "word/document.xml"}.issubset(archive.namelist()):
-                    raise ValueError("File is not a DOCX document.")
+                    raise limits.UnreadableDocument("This file is not a valid DOCX document. Re-save it from Word or upload a PDF instead.")
         except BadZipFile as exc:
-            raise ValueError("File is not a DOCX document.") from exc
+            raise limits.UnreadableDocument("This file is not a valid DOCX document. Re-save it from Word or upload a PDF instead.") from exc

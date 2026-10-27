@@ -241,7 +241,7 @@ class APICompatibilityTests(unittest.TestCase):
 
     def test_existing_routes_and_unauthenticated_access(self):
         paths = {r.path for r in self.api.app.routes if getattr(r, 'path', '').startswith('/api/')}
-        self.assertEqual({p for p in paths if not p.startswith('/api/workspaces')}, {'/api/signup', '/api/login', '/api/logout', '/api/upload', '/api/history', '/api/analyze', '/api/improvements'})
+        self.assertEqual({p for p in paths if not p.startswith('/api/workspaces')}, {'/api/signup', '/api/login', '/api/logout', '/api/upload', '/api/history', '/api/analyze', '/api/improvements', '/api/me/data'})
         with patch.dict(self.auth.sessions, {}, clear=True):
             with self.assertRaises(HTTPException) as error:
                 self.api.require_user('Bearer invalid')

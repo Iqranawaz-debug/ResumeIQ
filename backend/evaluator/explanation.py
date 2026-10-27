@@ -1,6 +1,7 @@
 """Read-only explanations of existing evaluations, never replacement scores."""
 from evaluator.scorer import calculate_score_components
 from extractor.evidence import safe_excerpt
+from matcher.requirement_lines import evaluate_requirement_lines
 from matcher.requirements import skill_requirements
 from utils.employment_dates import interval
 from utils.skills import canonical_skill, matching_skills
@@ -14,7 +15,7 @@ QUALITY_RULES = {
 }
 
 
-def explain(candidate, description, analysis, job_match=None, blend=None):
+def explain(candidate, description, analysis, job_match=None, blend=None, local_match=None):
     quality = [{'component': key, 'points': points, 'maximum': maximum, 'rule': QUALITY_RULES[key]}
                for key, (points, maximum) in calculate_score_components(candidate).items()]
     local = (job_match or {}).get('match_inputs')
@@ -76,6 +77,7 @@ def explain(candidate, description, analysis, job_match=None, blend=None):
                         'In local scoring, skills mentioned only under preferred/nice-to-have headings count half; all other job-description skills count in full.',
                         'Evidence quotes are limited to short, attributable extracted passages; formatting quality is not scored.'],
         'blend': blend, 'job_components': [],
+        'requirement_lines': evaluate_requirement_lines(candidate, description) if description else None,
     }
     if not description:
         result['summary'] = 'No job description supplied. Overall score equals the existing resume completeness score; no job compatibility was assessed.'
@@ -92,4 +94,11 @@ def explain(candidate, description, analysis, job_match=None, blend=None):
         result['limitations'].append('AI scores, skill claims and narrative are unverified provider judgments. Local evidence checks may disagree; the original score is preserved.')
         verified = {row['skill'] for row in rows if row['status'] == 'matched'}
         result['unverified_provider_matches'] = list(dict.fromkeys(canonical_skill(s) for s in analysis.get('matched_skills') or [] if canonical_skill(s) not in verified))
+        if local_match:
+            # Shown beside the AI score so the deterministic result stays visible.
+            result['local_comparison'] = {
+                'job_fit_score': local_match['overall_score'], 'job_fit_label': local_match['match_label'],
+                'overall_score': analysis.get('local_overall_score'), 'job_components': local_match['score_components'],
+                'rule': 'Local rules: skills 60%, experience 25%, education 15%; preferred-only skills count half.',
+            }
     return result

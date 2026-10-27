@@ -101,7 +101,9 @@ Uploads extract and categorize skills locally. AI job matching is opt-in per ana
 
 Phase 4 adds local score explanations, alias matching, requirement context and short source quotations. The existing AI-first score selection is preserved; its unverifiable judgments are labelled separately from local evidence checks. See [Phase 4 implementation and verification](docs/phase4-explainable-matching.md) for exact formulas, privacy limits, tests and known issues.
 
-Phase 5 generates local advice after analysis; no improvement content is sent to a provider. (An earlier AI copy-edit step was removed because its validator only accepted output identical to the local rewrite.) Cached results avoid regenerating advice for the same evaluation. Manual edits require review. Drafts reset on upload, analysis, logout, start-over or reload. See [Phase 5 implementation and verification](docs/phase5-resume-improvement.md).
+Phase 5 generates local advice after analysis. Optional AI wording suggestions send only flagged employment bullets (no names, organizations, contact details or sensitive attributes); each rewrite is kept only if it adds no new numbers, tools, names, responsibility level or content words, and may contain `[placeholders]` that must be replaced before acceptance. Cached results avoid regenerating advice for the same evaluation.
+
+Product upgrade: results are a tabbed dashboard (Requirements, Score breakdown, Improve, Interview prep, Document). Requirement-by-requirement review and document readability checks are display-only and never change scores. "What would change this score" re-runs the existing local rules on hypothetical edits. When AI job matching is used, its score stays the main score and the local rules score is always shown beside it; AI-matched skills are labelled explicit or inferred, invalid AI output is retried once, and fallbacks are shown in a banner. Inactive users' data expires after `DATA_RETENTION_SECONDS` (default 7200). Manual edits require review. Drafts reset on upload, analysis, logout, start-over or reload. See [Phase 5 implementation and verification](docs/phase5-resume-improvement.md).
 
 ## API
 
@@ -113,7 +115,9 @@ Phase 5 generates local advice after analysis; no improvement content is sent to
 | `POST /api/upload` | Authenticated multipart `file`; stores latest resume |
 | `GET /api/history` | Authenticated; up to five summary entries |
 | `POST /api/analyze` | Authenticated; current `resume_id`, optional form `job_description` or multipart `file`, optional `use_ai=false`; returns additive `analysis.analysis_id` |
-| `POST /api/improvements` | Authenticated form `resume_id`, `analysis_id`; returns cached local draft advice without rescoring |
+| `POST /api/improvements` | Authenticated form `resume_id`, `analysis_id`, optional `use_ai=false`; returns cached draft advice (AI wording suggestions only when `use_ai=true`, each grounding-checked) without rescoring |
+| `GET /api/me/data` | Authenticated; counts of what is stored for the account, retention period, whether an AI provider is configured |
+| `DELETE /api/me/data` | Authenticated; erases extracted resume data, analyses, history and recruiter workspaces (account remains) |
 
 Protected requests use `Authorization: Bearer <token>`. Analyze checks the submitted ID against the latest stored resume for the user. Improvements also require the current analysis ID; stale requests return 409. Responses include extraction/categorization or job-fit method/model metadata; the UI does not display all of it.
 
@@ -126,7 +130,7 @@ From `backend/`:
 .venv/Scripts/python.exe -m pip check
 ```
 
-Tests use synthetic data and in-memory PDF/DOCX fixtures. AI calls are mocked; no credentials are needed. Account storage is isolated and tests do not modify user data. The current backend suite passes 219 tests without expected failures. Phase 5 adds 28 tests in `test_improvements.py`. Security and network-guard suites preserve the Windows asyncio isolation fixes.
+Tests use synthetic data and in-memory PDF/DOCX fixtures. AI calls are mocked; no credentials are needed. Account storage is isolated and tests do not modify user data. The current backend suite passes 254 tests without expected failures. Phase 5 adds 28 tests in `test_improvements.py`. Security and network-guard suites preserve the Windows asyncio isolation fixes.
 
 From `frontend/`:
 
@@ -137,7 +141,7 @@ npm run build
 npm run preview
 ```
 
-The frontend suite has 35 tests, including draft state, component rendering, event callbacks and exports. Build output goes to ignored `frontend/dist/`. Preview is for local validation, not production hosting. See [Phase 1 verification](docs/phase-1-baseline.md) for historical dependency findings and the Phase 5 report for current verification.
+The frontend suite has 44 tests, including draft state, component rendering, event callbacks and exports. Build output goes to ignored `frontend/dist/`. Preview is for local validation, not production hosting. See [Phase 1 verification](docs/phase-1-baseline.md) for historical dependency findings and the Phase 5 report for current verification.
 
 ## Current limitations
 

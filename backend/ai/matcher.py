@@ -3,6 +3,7 @@ import json
 from ai.openrouter_client import MODEL, get_client
 from ai.schemas import AIMatchResult
 from ai.privacy import candidate_payload, redact_text
+from utils.skills import canonical_skill, matching_skills
 
 MATCH_PROMPT = (
     "You are screening a candidate against a job description. Return a JSON "
@@ -40,14 +41,11 @@ MATCH_PROMPT = (
 )
 
 
-def match_resume_to_job_ai(candidate: dict, job_description: str) -> dict:
-    """Use an LLM (via OpenRouter) to extract the job's requirements and
-    semantically score the candidate's fit against them.
+class InvalidAIResponse(ValueError):
+    """The provider answered, but not with a usable, consistent result."""
 
-    Raises on any failure so the caller can fall back to the rule-based
-    matcher.
-    """
-    client = get_client()
+
+def _completion(client, candidate, job_description):
     completion = client.chat.completions.create(
         model=MODEL,
         max_tokens=2500,
@@ -64,7 +62,38 @@ def match_resume_to_job_ai(candidate: dict, job_description: str) -> dict:
         ],
     )
     raw = completion.choices[0].message.content
-    result = AIMatchResult.model_validate(json.loads(raw))
+    try:
+        return AIMatchResult.model_validate(json.loads(raw))
+    except (TypeError, ValueError) as exc:  # Includes JSON and schema errors.
+        raise InvalidAIResponse("Provider response was not valid") from exc
+
+
+def match_evidence(candidate: dict, skills: list) -> dict:
+    """Label each provider-matched skill: 'explicit' when the skill appears in the
+    resume data sent to the provider, otherwise 'inferred' (provider judgment)."""
+    payload = candidate_payload(candidate)
+    held = {canonical_skill(s) for s in candidate.get("skills") or []}
+    lines = list(payload["skills"]) + list(payload["education"])
+    for entry in payload["experience"]:
+        lines += [entry.get("title") or ""] + list(entry.get("details") or [])
+    text = "\n".join(line for line in lines if isinstance(line, str))
+    return {skill: "explicit" if canonical_skill(skill) in held or canonical_skill(skill) in matching_skills(text, [skill])
+            else "inferred" for skill in skills}
+
+
+def match_resume_to_job_ai(candidate: dict, job_description: str) -> dict:
+    """Use an LLM (via OpenRouter) to extract the job's requirements and
+    semantically score the candidate's fit against them.
+
+    One retry is made for malformed or inconsistent output (not for network
+    errors or timeouts). Raises on any failure so the caller can fall back to
+    the rule-based matcher.
+    """
+    client = get_client()
+    try:
+        result = _completion(client, candidate, job_description)
+    except InvalidAIResponse:
+        result = _completion(client, candidate, job_description)
 
     return {
         "overall_score": result.overall_score,
@@ -72,6 +101,7 @@ def match_resume_to_job_ai(candidate: dict, job_description: str) -> dict:
         "skills_score": result.skills_score,
         "matched_skills": result.matched_skills,
         "missing_skills": result.missing_skills,
+        "match_evidence": match_evidence(candidate, result.matched_skills),
         "experience_score": result.experience_score,
         "experience_note": result.experience_note,
         "education_score": result.education_score,

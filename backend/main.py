@@ -1,5 +1,6 @@
 import os
 import secrets
+import time
 from starlette.concurrency import run_in_threadpool
 from utils import limits
 from utils.upload import read_upload
@@ -25,11 +26,13 @@ from auth.auth import (
 from auth.schemas import LoginRequest, SignupRequest
 from evaluator.analyzer import analyze_resume_for_job
 from evaluator.improvements import generate_improvements
+from ai.rewriter import suggest_rewrites
 from extractor.extractor import extract_candidate_info
 from parser.document_parser import parse_document
 from parser.resume_parser import parse_resume
 from utils.resume_checker import looks_like_resume
 from utils.candidate_processing import process_resume
+import recruiter
 from recruiter import create_router
 
 # Comma-separated list, e.g. "https://myapp.vercel.app,http://localhost:5173"
@@ -60,6 +63,23 @@ validated_resumes: dict = {}
 evaluation_histories: dict = {}
 upload_versions: dict = {}
 MAX_HISTORY = 5
+# Inactive users' extracted resume data, history and workspaces are erased
+# after this many seconds; uploaded file bytes are never retained.
+DATA_RETENTION_SECONDS = limits.positive_int("DATA_RETENTION_SECONDS", 2 * 3600)
+last_activity: dict = {}
+
+
+def erase_user_data(username: str) -> None:
+    recruiter.remove_user_data(username)
+    for store in (validated_resumes, evaluation_histories, upload_versions, last_activity):
+        store.pop(username, None)
+
+
+def expire_inactive_data(now: float | None = None) -> None:
+    now = time.monotonic() if now is None else now
+    for username, seen in list(last_activity.items()):
+        if now - seen > DATA_RETENTION_SECONDS and username not in recruiter.active_users:
+            erase_user_data(username)
 
 
 def require_user(authorization: str = Header(default="")) -> str:
@@ -67,6 +87,8 @@ def require_user(authorization: str = Header(default="")) -> str:
     email = get_email_from_token(token) if token else None
     if not email:
         raise HTTPException(status_code=401, detail="Not authenticated.")
+    expire_inactive_data()
+    last_activity[email] = time.monotonic()
     return email
 
 
@@ -153,6 +175,27 @@ async def get_history(username: str = Depends(require_user)):
     return {"history": evaluation_histories.get(username, [])}
 
 
+@app.get("/api/me/data")
+async def get_my_data(username: str = Depends(require_user)):
+    """What ResumeIQ currently holds for this account, without the data itself."""
+    resume = validated_resumes.get(username)
+    return {
+        "resume_stored": bool(resume),
+        "analysis_stored": bool(resume and resume.get("analysis")),
+        "history_entries": len(evaluation_histories.get(username, [])),
+        **recruiter.user_data_summary(username),
+        "retention_seconds": DATA_RETENTION_SECONDS,
+        "ai_provider_configured": bool(os.environ.get("OPENROUTER_API_KEY", "").strip()),
+    }
+
+
+@app.delete("/api/me/data")
+async def delete_my_data(username: str = Depends(require_user)):
+    """Erase extracted resume data, analyses, history and workspaces. The account remains."""
+    erase_user_data(username)
+    return {"message": "Your resume data, analyses, history and workspaces were deleted."}
+
+
 @app.post("/api/analyze")
 async def analyze_resume(
     job_description: str = Form(""),
@@ -184,6 +227,8 @@ async def analyze_resume(
             jd_text = await run_in_threadpool(parse_document, file.filename, content)
         except limits.DocumentLimitError as exc:
             raise HTTPException(413, str(exc))
+        except limits.UnreadableDocument as exc:
+            raise HTTPException(422, str(exc))
         except Exception:
             raise HTTPException(422, "Could not read the job description file.")
         if not jd_text.strip():
@@ -222,31 +267,37 @@ async def improve_resume(
     resume_id: str = Form(..., min_length=1, max_length=128),
     analysis_id: str = Form(..., min_length=1, max_length=128),
     username: str = Depends(require_user),
+    use_ai: bool = Form(False),
 ):
     """Explicit draft generation, separate from scoring and history writes.
 
-    Local only: the former AI copy-edit step could only accept output identical
-    to the local rewrite, so it added a provider call without changing results.
+    Local advice always comes first. With use_ai, flagged employment bullets are
+    sent for wording suggestions, each kept only if it passes grounded_rewrite.
     """
     resume = validated_resumes.get(username)
     analysis = resume.get('analysis') if resume else None
     if not resume or resume.get('resume_id') != resume_id or not analysis or analysis.get('analysis_id') != analysis_id:
         raise HTTPException(409, 'Resume or analysis changed. Analyze the current resume first.')
+    mode = 'ai' if use_ai else 'local'
     cache = resume.setdefault('improvement_cache', {})
     pending = resume.setdefault('improvement_pending', set())
-    if 'local' in cache:
-        return {'resume_id': resume_id, 'analysis_id': analysis_id, 'improvements': cache['local']}
-    if 'local' in pending:
+    if mode in cache:
+        return {'resume_id': resume_id, 'analysis_id': analysis_id, 'improvements': cache[mode]}
+    if mode in pending:
         raise HTTPException(409, 'Improvement generation is already in progress.')
-    pending.add('local')
+    pending.add(mode)
     try:
-        result = await run_in_threadpool(generate_improvements, resume['candidate'], analysis)
+        local = cache.get('local')
+        if local is None:
+            local = await run_in_threadpool(generate_improvements, resume['candidate'], analysis)
+        result = await run_in_threadpool(suggest_rewrites, resume['candidate'], local) if use_ai else local
         if validated_resumes.get(username) is not resume or resume.get('analysis') is not analysis:
             raise HTTPException(409, 'Resume or analysis changed during generation. Please retry.')
-        cache['local'] = result
+        cache['local'] = local
+        cache[mode] = result
         return {'resume_id': resume_id, 'analysis_id': analysis_id, 'improvements': result}
     finally:
-        pending.discard('local')
+        pending.discard(mode)
 
 
 app.include_router(create_router(require_user))

@@ -1,5 +1,6 @@
 import React from 'react'
 import { checklistCounts, improvementReport } from './improvementState.js'
+import { hasPlaceholder } from './resultsModel.js'
 
 export default function ImprovementWorkspace({ data, draft, busy, error, canGenerate, onGenerate, onAction }) {
   const counts = checklistCounts(draft)
@@ -18,21 +19,25 @@ export default function ImprovementWorkspace({ data, draft, busy, error, canGene
     <h2>Improve your resume wording</h2>
     <p>Review drafts without changing the original resume or its score. Changes are kept only in this active session; download your report before leaving.</p>
     <div className="improvement-actions">
-      <button type="button" className="evaluate-button" disabled={busy || !canGenerate} onClick={() => onGenerate()}>Generate suggestions</button>
+      <button type="button" className="evaluate-button" disabled={busy || !canGenerate} onClick={() => onGenerate(false)}>Generate suggestions</button>
+      <button type="button" className="link-button" disabled={busy || !canGenerate} onClick={() => onGenerate(true)}>Suggest stronger wording with AI</button>
     </div>
-    <p className="wizard-note">Suggestions are generated locally; no resume content is sent to an AI provider.</p>
+    <p className="wizard-note">Local suggestions never leave the server. The AI option sends only flagged employment bullets without names, organizations or contact details, and keeps a rewrite only if it adds no new tools, numbers, names or responsibilities.</p>
     {!canGenerate && <p>Analyze the current resume to enable improvement suggestions. Older reports remain readable.</p>}
     {busy && <p role="status">Preparing suggestions…</p>}
     {error && <p className="status error" role="alert">{error}</p>}
     {!data ? <p>No improvements generated yet.</p> : <>
       <p role="status">{data.note}</p>
+      {data.ai && data.ai.rejected?.length > 0 && <p className="wizard-note">{data.ai.rejected.length} AI suggestion(s) were discarded because they changed or added facts.</p>}
       {data.bounded && <p>Showing a bounded selection of improvements. Review the rest of your resume manually.</p>}
       {(data.suggestions || []).length === 0 && <p>No safe automatic wording changes identified. Review the checklist for clarification opportunities.</p>}
       {(data.suggestions || []).map((item) => {
         const state = draft?.suggestions?.[item.id] || { text: item.suggested_text || '', status: 'pending' }
+        const placeholder = hasPlaceholder(state.text)
         return <article key={item.id} className="improvement-card" aria-label={`${item.section} entry ${item.entry_index + 1}`}>
           <h3>{item.section} entry {item.entry_index + 1}, description {item.detail_index + 1}</h3>
-          <p>{item.feedback} · {item.source} · <strong>Status: {state.status}</strong></p>
+          <p>{item.feedback} · {item.source === 'ai-grounded' ? 'AI (grounding checked)' : item.source} · <strong>Status: {state.status}</strong></p>
+          {(item.issues || []).length > 0 && <ul className="issue-chips" aria-label="Writing issues">{item.issues.map((issue) => <li key={issue.code} title={issue.tip}>{issue.label}</li>)}</ul>}
           <div className="requirements-grid">
             <div><h4>Original content</h4><blockquote>{item.original_text}</blockquote></div>
             <div><label htmlFor={`draft-${item.id}`}>Suggested improvement — edit draft</label>
@@ -42,9 +47,10 @@ export default function ImprovementWorkspace({ data, draft, busy, error, canGene
             </div>
           </div>
           <p>{item.reason}</p>
-          <p className="wizard-note">{state.edited ? 'User-edited text is not automatically verified. Confirm all claims before accepting.' : 'Review meaning and factual accuracy before accepting.'}</p>
+          {placeholder ? <p className="wizard-note placeholder-warning" role="note">Replace each [bracketed placeholder] with a real fact, or delete it, before accepting.</p>
+            : <p className="wizard-note">{state.edited ? 'User-edited text is not automatically verified. Confirm all claims before accepting.' : 'Review meaning and factual accuracy before accepting.'}</p>}
           <div className="improvement-actions">
-            <button type="button" className="link-button" disabled={!state.text.trim()} onClick={() => onAction({ type: 'accept', id: item.id })}>Accept draft</button>
+            <button type="button" className="link-button" disabled={!state.text.trim() || placeholder} onClick={() => onAction({ type: 'accept', id: item.id })}>Accept draft</button>
             <button type="button" className="link-button" onClick={() => onAction({ type: 'reject', id: item.id })}>Reject</button>
             <button type="button" className="link-button" onClick={() => onAction({ type: 'restore', id: item.id })}>Restore original</button>
           </div>
@@ -61,7 +67,7 @@ export default function ImprovementWorkspace({ data, draft, busy, error, canGene
       <p>Checklist completion is not a score or a hiring recommendation.</p>
       {(data.feedback || []).map((item, index) => <p key={index}>{item.section} entry {item.entry_index + 1}: {item.label}. {item.note}</p>)}
       <button type="button" className="link-button" onClick={download}>Download improvement report (.txt)</button>
-      <p>Use “Generate Full Report (PDF)” below to open the browser print/save-as-PDF dialog, including current drafts.</p>
+      <p>Use “Print / save as PDF” at the top of the results to open the browser print dialog, including current drafts.</p>
       <details><summary>Improvement limits</summary><ul>{(data.limitations || []).map((item, index) => <li key={index}>{item}</li>)}</ul></details>
     </>}
   </section>

@@ -1,3 +1,5 @@
+from utils.skills import display_skill
+
 SECTION_LABELS = {
     "name": "the candidate's name",
     "email": "an email address",
@@ -68,7 +70,7 @@ def generate_interview_questions(
         questions.append(f"How do you decide between using {skills[0]} and {skills[1]} on a project?")
     if missing_skills:
         questions.append(
-            f"This role involves {missing_skills[0]} — do you have any exposure to it, even outside formal work?"
+            f"This role involves {display_skill(missing_skills[0])} — do you have any exposure to it, even outside formal work?"
         )
 
     experience = candidate.get("experience") or []

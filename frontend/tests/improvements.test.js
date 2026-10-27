@@ -1,17 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { transformWithOxc } from 'vite'
 import { initializeDraft, updateDraft, checklistCounts, improvementReport } from '../src/improvementState.js'
+import { loadComponent } from './load-component.mjs'
 
 async function component(name) {
-  const source = await readFile(new URL(`../src/${name}.jsx`, import.meta.url), 'utf8')
-  const result = await transformWithOxc(source, `${name}.jsx`, { jsx: { runtime: 'classic' } })
-  const code = result.code.replace(/(['"])react\1/g, JSON.stringify(import.meta.resolve('react')))
-    .replace(/(['"])\.\/improvementState.js\1/g, JSON.stringify(new URL('../src/improvementState.js', import.meta.url).href))
-  return (await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)).default
+  return (await loadComponent(name)).default
 }
 const Workspace = await component('ImprovementWorkspace')
 const Report = await component('ImprovementReport')
@@ -71,10 +66,23 @@ test('actual component event handlers dispatch edits and decisions', () => {
   const tree = nodes(Workspace({ data, draft: initializeDraft(data), canGenerate: true, onAction: (action) => actions.push(action), onGenerate: (...args) => calls.push(args) }))
   tree.find((node) => node.type === 'textarea').props.onChange({ target: { value: 'Edited' } })
   tree.find((node) => node.type === 'select').props.onChange({ target: { value: 'complete' } })
-  for (const label of ['Accept draft', 'Reject', 'Restore original', 'Generate suggestions']) tree.find((node) => node.type === 'button' && node.props.children === label).props.onClick()
+  for (const label of ['Accept draft', 'Reject', 'Restore original', 'Generate suggestions', 'Suggest stronger wording with AI']) tree.find((node) => node.type === 'button' && node.props.children === label).props.onClick()
   assert.deepEqual(actions.map((action) => action.type), ['edit', 'checklist', 'accept', 'reject', 'restore'])
-  assert.deepEqual(calls, [[]])
-  assert.equal(tree.some((node) => node.type === 'button' && /AI/.test(String(node.props.children))), false)
+  assert.deepEqual(calls, [[false], [true]])
+})
+test('AI suggestions show issues and block acceptance until placeholders are replaced', () => {
+  const aiData = { ...data, suggestions: [{ ...data.suggestions[0], source: 'ai-grounded', suggested_text: 'Used SQL [result, if known].',
+    issues: [{ code: 'no_outcome', label: 'No stated outcome', tip: 'Add the result if known.' }] }] }
+  const tree = nodes(Workspace({ data: aiData, draft: initializeDraft(aiData), canGenerate: true, onAction: () => {}, onGenerate: () => {} }))
+  const accept = tree.find((node) => node.type === 'button' && node.props.children === 'Accept draft')
+  assert.equal(accept.props.disabled, true)
+  const html = renderToStaticMarkup(React.createElement(Workspace, { data: aiData, draft: initializeDraft(aiData), canGenerate: true }))
+  assert.match(html, /No stated outcome/)
+  assert.match(html, /AI \(grounding checked\)/)
+  assert.match(html, /Replace each \[bracketed placeholder\]/)
+  const edited = updateDraft(aiData, initializeDraft(aiData), { type: 'edit', id: 'one', text: 'Used SQL.' })
+  const ready = nodes(Workspace({ data: aiData, draft: edited, canGenerate: true, onAction: () => {}, onGenerate: () => {} }))
+  assert.equal(ready.find((node) => node.type === 'button' && node.props.children === 'Accept draft').props.disabled, false)
 })
 test('missing data, older analyses, loading and errors have visible states', () => {
   assert.match(render({ data: undefined, canGenerate: false }), /Older reports remain readable/)

@@ -23,6 +23,10 @@ class DocumentLimitError(ValueError):
     pass
 
 
+class UnreadableDocument(ValueError):
+    """A document problem whose message is safe and useful to show the user."""
+
+
 def bound_text(text):
     if len(text) > TEXT_CHARS:
         raise DocumentLimitError("Document text exceeds the configured limit.")

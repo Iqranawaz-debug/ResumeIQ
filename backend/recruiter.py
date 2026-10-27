@@ -107,6 +107,18 @@ def summary(record, group):
     }
 
 
+def user_data_summary(user):
+    groups = workspaces.get(user, {})
+    return {'workspaces': len(groups), 'candidates': sum(len(g['candidates']) for g in groups.values())}
+
+
+def remove_user_data(user):
+    """Erase every workspace the user owns. Refuses while an upload/analysis runs."""
+    if user in active_users:
+        raise HTTPException(409, 'Wait for processing to finish before deleting your data.')
+    workspaces.pop(user, None)
+
+
 def group_summary(group):
     return {k: group[k] for k in ('id', 'title', 'version', 'created_at', 'updated_at')} | {'candidate_count': len(group['candidates'])}
 

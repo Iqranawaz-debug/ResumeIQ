@@ -3,11 +3,13 @@ import Auth from './Auth'
 import BrandMark from './BrandMark'
 import ThemeToggle from './ThemeToggle'
 import PrintableReport from './PrintableReport'
-import ExplainableResults from './ExplainableResults'
 import RecruiterWorkspace from './RecruiterWorkspace'
-import ImprovementWorkspace from './ImprovementWorkspace'
+import ResultsDashboard from './ResultsDashboard'
+import DocumentChecks from './DocumentChecks'
+import PrivacyPanel from './PrivacyPanel'
 import { initializeDraft, updateDraft } from './improvementState'
 import './App.css'
+import './dashboard.css'
 import { API_BASE_URL, apiRequest, analysisForm } from './api'
 
 const UPLOAD_URL = `${API_BASE_URL}/api/upload`
@@ -23,21 +25,6 @@ const STEP_COPY = {
   3: { eyebrow: 'STEP 3 OF 4', title: 'Add a job description', subtitle: 'Optional — add one for a job-fit score, or skip to evaluate the resume alone.' },
   4: { eyebrow: 'STEP 4 OF 4', title: 'Analysis Result', subtitle: 'Full breakdown, strengths, and recommendation.' },
 }
-
-const RECOMMENDATION_CLASS = {
-  'Highly Recommended': 'rec-highly',
-  Recommended: 'rec-recommended',
-  Consider: 'rec-consider',
-  'Not Recommended': 'rec-not',
-}
-
-const RADAR_LABELS = [
-  { key: 'technical_skills', label: 'Technical Skills' },
-  { key: 'communication', label: 'Communication' },
-  { key: 'projects', label: 'Projects' },
-  { key: 'experience', label: 'Experience' },
-  { key: 'education', label: 'Education' },
-]
 
 function getExtension(filename) {
   return filename.includes('.') ? filename.split('.').pop().toLowerCase() : ''
@@ -106,7 +93,7 @@ function App() {
     setImprovementError('')
   }
 
-  async function generateImprovements() {
+  async function generateImprovements(useAI = false) {
     if (!resumeId || !analysis?.analysis_id) return
     improvementRequest.current?.abort()
     const controller = new AbortController()
@@ -116,6 +103,7 @@ function App() {
     const body = new FormData()
     body.append('resume_id', resumeId)
     body.append('analysis_id', analysis.analysis_id)
+    body.append('use_ai', String(Boolean(useAI)))
     try {
       const data = await apiRequest(`${API_BASE_URL}/api/improvements`, { method: 'POST', body,
         signal: controller.signal, headers: { Authorization: `Bearer ${token}` } })
@@ -316,6 +304,9 @@ function App() {
         `Job Description Match: ${analysis.job_fit_score} / 100 - ${analysis.job_fit_label}`,
         `Combined (Overall): ${analysis.overall_score} / 100 - ${analysis.recommendation}`,
       )
+      if (Number.isFinite(analysis.local_overall_score) && analysis.job_fit_method === 'ai') {
+        lines.push(`Local rules (for comparison): ${analysis.local_overall_score} / 100; job fit ${analysis.local_job_fit_score} / 100 - ${analysis.local_job_fit_label}`)
+      }
       if (analysis.matched_skills.length > 0) {
         lines.push('', analysis.job_fit_method === 'ai' ? 'PROVIDER-REPORTED MATCHES (UNVERIFIED)' : 'MATCHED SKILLS', ...analysis.matched_skills.map((s) => `- ${s}`))
       }
@@ -333,6 +324,14 @@ function App() {
     if (analysis.suggestions.length > 0) {
       lines.push('', 'SUGGESTIONS', ...analysis.suggestions.map((s) => `- ${s}`))
     }
+
+    const requirementRows = analysis.explanation?.requirement_lines?.rows || []
+    if (requirementRows.length) {
+      lines.push('', 'REQUIREMENT REVIEW (display only; does not change the score)')
+      for (const row of requirementRows) lines.push(`[${row.status}] ${row.text} - ${row.reason}`)
+    }
+    const findings = candidate.document_checks?.findings || []
+    if (findings.length) lines.push('', 'DOCUMENT READABILITY', ...findings.map((item) => `[${item.severity}] ${item.title}: ${item.fix}`))
 
     if (analysis.explanation) {
       lines.push('', 'SCORE EXPLANATION', analysis.explanation.summary, analysis.explanation.advisory)
@@ -421,6 +420,9 @@ function App() {
           >
             History
           </button>
+          <button type="button" className={`sidebar-nav-item ${activePage === 'privacy' ? 'active' : ''}`} onClick={() => setActivePage('privacy')}>
+            Privacy &amp; data
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -434,7 +436,7 @@ function App() {
       <main className="main-content">
         {activePage === 'recruiter' && <RecruiterWorkspace key={token} token={token} />}
         {activePage === 'upload' && (
-          <div className="wizard">
+          <div className={`wizard ${currentStep === 4 ? 'wizard-wide' : ''}`}>
             <p className="eyebrow">{step.eyebrow}</p>
             <h1>{step.title}</h1>
             <p className="subtitle">{step.subtitle}</p>
@@ -482,7 +484,7 @@ function App() {
                 )}
                 {uploadStatus === 'error' && <p className="status error">{uploadMessage}</p>}
 
-                <p className="wizard-note">The file itself is not kept. Extracted details and results stay in server memory until you upload another resume or the server restarts; logging out does not erase them.</p>
+                <p className="wizard-note">The file itself is not kept. Extracted details and results stay in server memory and are erased after a period of inactivity, on restart, or when you delete them under Privacy &amp; data.</p>
 
                 <div className="wizard-actions">
                   <button
@@ -588,6 +590,8 @@ function App() {
                     </ul>
                   ) : <p className="not-found">Not found</p>}
                 </div>
+
+                <DocumentChecks checks={candidate.document_checks} compact />
 
                 <div className="wizard-actions">
                   <button type="button" className="link-button" onClick={() => setCurrentStep(1)}>
@@ -698,215 +702,12 @@ function App() {
 
             {currentStep === 4 && analysis && (
               <div className="wizard-panel">
-                <div className="evaluation-card">
-                  <p className="field-label" role="status">{analysis.job_fit_method === 'ai' ? 'AI-assisted job matching' : 'Local analysis'}. {analysis.processing_note}</p>
-                  <p className="wizard-note">Indicative document review, not an official ATS score or hiring probability. Verify all evidence before making decisions.</p>
-                  <div className="candidate-card-header">
-                    <button type="button" className="link-button" onClick={handleDownloadRecommendation}>
-                      Download Recommendation
-                    </button>
-                  </div>
-                  <div className="score-row">
-                    <div className="score-ring" style={{ '--score': analysis.overall_score }}>
-                      <div className="score-ring-inner">
-                        <span className="score-number">{analysis.overall_score}</span>
-                        <span className="score-max">/ 100</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="field-label">Advisory score band</p>
-                      <p className={`recommendation-badge ${RECOMMENDATION_CLASS[analysis.recommendation] || ''}`}>
-                        {analysis.recommendation}
-                      </p>
-                      <p className="experience-level">{analysis.experience_level}</p>
-                    </div>
-                  </div>
-
-                  {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
-                    <>
-                      <div className="breakdown">
-                        <div className="breakdown-row">
-                          <span className="breakdown-label">resume quality</span>
-                          <div className="breakdown-track">
-                            <div className="breakdown-fill" style={{ width: `${analysis.resume_quality_score}%` }} />
-                          </div>
-                          <span className="breakdown-value">{analysis.resume_quality_score}%</span>
-                        </div>
-                        <div className="breakdown-row">
-                          <span className="breakdown-label">job fit</span>
-                          <div className="breakdown-track">
-                            <div className="breakdown-fill" style={{ width: `${analysis.job_fit_score}%` }} />
-                          </div>
-                          <span className="breakdown-value">{analysis.job_fit_score}%</span>
-                        </div>
-                      </div>
-
-                      <p className="field-label"><strong>Score Comparison</strong></p>
-                      <div className="table-scroll">
-                        <table className="history-table comparison-table">
-                          <thead>
-                            <tr>
-                              <th>Score Type</th>
-                              <th>Score</th>
-                              <th>Verdict</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td>Resume Quality</td>
-                              <td>{analysis.resume_quality_score} / 100</td>
-                              <td>{analysis.resume_only_recommendation}</td>
-                            </tr>
-                            <tr>
-                              <td>Job Description Match</td>
-                              <td>{analysis.job_fit_score} / 100</td>
-                              <td>{analysis.job_fit_label}</td>
-                            </tr>
-                            <tr className="comparison-final-row">
-                              <td>Overall Score</td>
-                              <td>{analysis.overall_score} / 100</td>
-                              <td>{analysis.recommendation}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <p className="comparison-formula">
-                        Overall Score = round(Resume Quality × 30% + Job Description Match × 70%); capped at 49 for a weak job fit.
-                      </p>
-                    </>
-                  )}
-
-                  <ExplainableResults explanation={analysis.explanation} />
-                  <ImprovementWorkspace data={improvements} draft={improvementDraft}
-                    busy={improvementBusy} error={improvementError} canGenerate={Boolean(resumeId && analysis.analysis_id)}
-                    onGenerate={generateImprovements}
-                    onAction={(action) => setImprovementDraft((draft) => updateDraft(improvements, draft, action))} />
-
-                  <div className="eval-stats">
-                    <div>
-                      <span className="stat-value">{analysis.skills_count}</span>
-                      <span className="stat-label">Skills</span>
-                    </div>
-                    <div>
-                      <span className="stat-value">{analysis.total_experience_years}</span>
-                      <span className="stat-label">Years Experience</span>
-                    </div>
-                    <div>
-                      <span className="stat-value">{analysis.missing_sections.length}</span>
-                      <span className="stat-label">Missing Sections</span>
-                    </div>
-                  </div>
-
-                  {analysis.missing_sections.length > 0 && (
-                    <div className="field-label">
-                      <strong>Missing:</strong> {analysis.missing_sections.join(', ')}
-                    </div>
-                  )}
-
-                  {!analysis.explanation && analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
-                    <>
-                      {analysis.matched_skills.length === 0 && analysis.missing_skills.length === 0 ? (
-                        <>
-                          <p className="field-label"><strong>Skill Match</strong></p>
-                          <p className="not-found">
-                            No specific skills could be identified in this job description to compare
-                            against the resume.
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="field-label"><strong>Matched Skills</strong></p>
-                          {analysis.matched_skills.length > 0 ? (
-                            <ul className="skill-list">
-                              {analysis.matched_skills.map((skill) => (
-                                <li key={skill}>{skill}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="not-found">None of the required skills were found on the resume</p>
-                          )}
-
-                          <p className="field-label"><strong>Requirements Not Evidenced</strong></p>
-                          {analysis.missing_skills.length > 0 ? (
-                            <ul className="skill-list skill-list-missing">
-                              {analysis.missing_skills.map((skill) => (
-                                <li key={skill}>{skill}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="not-found">None &mdash; all required skills found</p>
-                          )}
-                        </>
-                      )}
-
-                      <p className="field-label">{analysis.experience_note}</p>
-                      <p className="field-label">{analysis.education_note}</p>
-                    </>
-                  )}
-
-                  {analysis.radar && (
-                    <>
-                      <p className="field-label"><strong>Candidate Strength Radar</strong></p>
-                      <p className="wizard-note">Document indicators from the existing rules; these do not verify proficiency, personality, or hiring suitability.</p>
-                      <div className="breakdown radar-breakdown">
-                        {RADAR_LABELS.map(({ key, label }) => (
-                          <div className="breakdown-row" key={key}>
-                            <span className="breakdown-label">{label}</span>
-                            <div className="breakdown-track">
-                              <div className="breakdown-fill" style={{ width: `${analysis.radar[key]}%` }} />
-                            </div>
-                            <span className="breakdown-value">{analysis.radar[key]}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {analysis.job_fit_method === 'ai' && <p className="wizard-note">The following narrative is AI-generated and unverified. Use the local evidence checks above and human review.</p>}
-                  <p className="field-label"><strong>Resume observations</strong></p>
-                  {analysis.strengths.length > 0 ? (
-                    <ul>
-                      {analysis.strengths.map((item, i) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="not-found">None identified</p>
-                  )}
-
-                  <p className="field-label"><strong>Review considerations</strong></p>
-                  {analysis.weaknesses && analysis.weaknesses.length > 0 ? (
-                    <ul>
-                      {analysis.weaknesses.map((item, i) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="not-found">None identified</p>
-                  )}
-
-                  <p className="field-label"><strong>Suggestions</strong></p>
-                  <ul>
-                    {analysis.suggestions.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-
-                  <p className="field-label"><strong>Suggested Interview Questions</strong></p>
-                  {analysis.interview_questions && analysis.interview_questions.length > 0 ? (
-                    <ol>
-                      {analysis.interview_questions.map((item, i) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p className="not-found">None generated</p>
-                  )}
-
-                  <button type="button" className="evaluate-button print-report-button" onClick={() => window.print()}>
-                    Generate Full Report (PDF)
-                  </button>
-                </div>
+                <ResultsDashboard key={analysis.analysis_id} analysis={analysis} candidate={candidate}
+                  improvements={improvements} improvementDraft={improvementDraft}
+                  improvementBusy={improvementBusy} improvementError={improvementError}
+                  canGenerate={Boolean(resumeId && analysis.analysis_id)} onGenerate={generateImprovements}
+                  onAction={(action) => setImprovementDraft((draft) => updateDraft(improvements, draft, action))}
+                  onDownload={handleDownloadRecommendation} />
 
                 <div className="wizard-actions">
                   <button type="button" className="link-button" onClick={() => setCurrentStep(3)}>
@@ -918,6 +719,15 @@ function App() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {activePage === 'privacy' && (
+          <div className="wizard">
+            <p className="eyebrow">/ PRIVACY</p>
+            <h1>Privacy &amp; data</h1>
+            <p className="subtitle">Exactly what is held for your account, and a way to erase it.</p>
+            <PrivacyPanel key={token} token={token} onDeleted={() => { handleStartOver(); setHistory([]) }} />
           </div>
         )}
 

@@ -40,7 +40,9 @@ class LocalImprovementTests(OfflineTestCase):
     def test_strong_text_not_exaggerated(self):
         result = generate_improvements({'experience': [{'details': ['Built Python scripts for daily reporting.'], 'duration': '2020-2021'}]}, {})
         self.assertEqual(result['suggestions'], [])
-        self.assertEqual(result['feedback'][0]['label'], 'No specific wording issue detected')
+        # No rewrite is generated; the bullet review still notes the missing outcome.
+        self.assertEqual(result['feedback'][0]['label'], 'Could be stronger: no stated outcome')
+        self.assertEqual(generate_improvements({'experience': [{'details': ['Reduced reporting time by 30% with Python scripts.'], 'duration': '2020-2021'}]}, {})['feedback'][0]['label'], 'No specific wording issue detected')
 
     def test_long_text_is_bounded(self):
         result = generate_improvements(source('Built ' + 'a service ' * 200), {})
@@ -90,7 +92,7 @@ class LocalImprovementTests(OfflineTestCase):
         self.assertEqual(len(result['requirements']), 2)
         advice = [item['text'] for item in result['checklist'] if item['category'] == 'Job relevance']
         self.assertEqual(len(advice), 1)
-        self.assertIn('If you have practical docker', advice[0])
+        self.assertIn('If you have practical Docker', advice[0])
         self.assertEqual(result['requirements'][0]['contexts'], ['preferred'])
 
     def test_alias_results_reused_without_rematching(self):
@@ -133,8 +135,8 @@ class ImprovementAPITests(OfflineAsyncTestCase):
     async def test_local_response_cached_without_score_changes(self):
         before = copy.deepcopy((self.record['candidate'], self.analysis))
         with patch('main.generate_improvements', wraps=self.api.generate_improvements) as local:
-            first = await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid')
-            second = await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid')
+            first = await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid', use_ai=False)
+            second = await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid', use_ai=False)
         local.assert_called_once()
         self.assertEqual(first, second)
         self.assertEqual((self.record['candidate'], self.analysis), before)
@@ -143,18 +145,18 @@ class ImprovementAPITests(OfflineAsyncTestCase):
 
     async def test_improvements_never_call_a_provider(self):
         with patch('ai.openrouter_client.get_client', side_effect=AssertionError('No provider calls')):
-            result = await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid')
+            result = await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid', use_ai=False)
         self.assertEqual(result['improvements']['method'], 'local')
         self.assertFalse(importlib.util.find_spec('ai.improvements'))
 
     async def test_cross_user_stale_ids_and_no_analysis_rejected(self):
         for resume_id, analysis_id, user in [('resume-one', 'analysis-one', 'other@example.invalid'), ('bad', 'analysis-one', 'one@example.invalid'), ('resume-one', 'old-analysis', 'one@example.invalid')]:
             with self.subTest(user=user), self.assertRaises(HTTPException) as error:
-                await self.api.improve_resume(resume_id, analysis_id, user)
+                await self.api.improve_resume(resume_id, analysis_id, user, use_ai=False)
             self.assertEqual(error.exception.status_code, 409)
 
     async def test_reanalysis_invalidates_cache(self):
-        await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid')
+        await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid', use_ai=False)
         await self.api.analyze_resume('', 'resume-one', None, 'one@example.invalid', use_ai=False)
         self.assertEqual(self.record['improvement_cache'], {})
         self.assertNotEqual(self.record['analysis']['analysis_id'], 'analysis-one')
@@ -165,7 +167,7 @@ class ImprovementAPITests(OfflineAsyncTestCase):
             self.record['analysis'] = {'analysis_id': 'new'}
             return result
         with patch('main.run_in_threadpool', changed), self.assertRaises(HTTPException) as error:
-            await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid')
+            await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid', use_ai=False)
         self.assertEqual(error.exception.status_code, 409)
         self.assertEqual(self.record['improvement_cache'], {})
         self.assertEqual(self.record['improvement_pending'], set())
@@ -177,11 +179,11 @@ class ImprovementAPITests(OfflineAsyncTestCase):
             await release.wait()
             return function(*args)
         with patch('main.run_in_threadpool', slow):
-            task = asyncio.create_task(self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid'))
+            task = asyncio.create_task(self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid', use_ai=False))
             await started.wait()
             try:
                 with self.assertRaises(HTTPException) as error:
-                    await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid')
+                    await self.api.improve_resume('resume-one', 'analysis-one', 'one@example.invalid', use_ai=False)
                 self.assertEqual(error.exception.status_code, 409)
             finally:
                 release.set()

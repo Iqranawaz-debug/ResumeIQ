@@ -68,7 +68,7 @@
 }
 
 .sidebar-nav-item.active {
-  background: linear-gradient(90deg, var(--accent), var(--lime));
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
   color: #ffffff;
 }
 
@@ -148,7 +148,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent), var(--lime));
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
 }
 
@@ -194,7 +194,7 @@
 }
 
 .link-button:hover {
-  color: var(--lime-strong);
+  color: var(--accent-2-strong);
 }
 
 .eyebrow {
@@ -202,7 +202,7 @@
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
-  color: var(--lime-strong);
+  color: var(--accent-2-strong);
   margin-bottom: 12px;
 }
 
@@ -232,8 +232,8 @@
 }
 
 .dropzone.dragging {
-  border-color: var(--lime-strong);
-  background-color: var(--lime-soft);
+  border-color: var(--accent-2-strong);
+  background-color: var(--accent-2-soft);
 }
 
 .dropzone.error {
@@ -261,7 +261,7 @@
   height: 52px;
   margin: 0 auto 16px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--lime));
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #ffffff;
   font-size: 20px;
 }
@@ -295,7 +295,7 @@
 }
 
 .status.success {
-  color: var(--lime-strong);
+  color: var(--accent-2-strong);
 }
 
 .status.error {
@@ -307,8 +307,8 @@
   padding: 12px 28px;
   border: none;
   border-radius: 999px;
-  background: var(--lime);
-  color: var(--lime-text);
+  background: var(--accent-2);
+  color: var(--accent-2-text);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -444,7 +444,7 @@ li {
 
 .history-search:focus {
   outline: none;
-  border-color: var(--lime-strong);
+  border-color: var(--accent-2-strong);
 }
 
 .job-description-input {
@@ -462,7 +462,7 @@ li {
 
 .job-description-input:focus {
   outline: none;
-  border-color: var(--lime-strong);
+  border-color: var(--accent-2-strong);
 }
 
 .jd-mode-toggle {
@@ -485,8 +485,8 @@ li {
 }
 
 .jd-mode-button.active {
-  background: var(--lime);
-  color: var(--lime-text);
+  background: var(--accent-2);
+  color: var(--accent-2-text);
 }
 
 .jd-dropzone {
@@ -530,7 +530,7 @@ li {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: conic-gradient(var(--lime) calc(var(--score) * 3.6deg), var(--border-strong) 0);
+  background: conic-gradient(var(--accent-2) calc(var(--score) * 3.6deg), var(--border-strong) 0);
 }
 
 .score-ring-inner {
@@ -567,8 +567,8 @@ li {
 }
 
 .rec-highly {
-  background: var(--lime-soft);
-  color: var(--lime-strong);
+  background: var(--accent-2-soft);
+  color: var(--accent-2-strong);
 }
 
 .rec-recommended {
@@ -577,8 +577,8 @@ li {
 }
 
 .rec-consider {
-  background: rgba(250, 204, 21, 0.15);
-  color: #facc15;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .rec-not {
@@ -622,7 +622,7 @@ li {
 .breakdown-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), var(--lime));
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
 
 .breakdown-value {
@@ -824,7 +824,7 @@ li {
 
 .auth-form input:focus {
   outline: none;
-  border-color: var(--lime-strong);
+  border-color: var(--accent-2-strong);
 }
 
 .auth-submit {

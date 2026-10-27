@@ -133,7 +133,8 @@ class OptInAITests(OfflineAsyncTestCase):
             result = await api.analyze_resume('Python', 'resume-one', None, 'one@example.invalid', use_ai=True)
         provider.assert_called_once()
         self.assertEqual(result['analysis']['job_fit_method'], 'rule-based')
-        self.assertIn('AI unavailable', result['analysis']['processing_note'])
+        self.assertEqual(result['analysis']['ai_status'], 'fallback')
+        self.assertIn('unavailable', result['analysis']['processing_note'])
 
     async def test_http_default_is_local(self):
         sent = []
@@ -153,5 +154,6 @@ class OptInAITests(OfflineAsyncTestCase):
         body = json.loads(b''.join(m.get('body', b'') for m in sent if m['type'] == 'http.response.body'))
         self.assertEqual(body['analysis']['job_fit_method'], 'rule-based')
 
-    async def test_improvements_endpoint_has_no_ai_mode(self):
-        self.assertNotIn('use_ai', api.improve_resume.__code__.co_varnames)
+    async def test_improvements_ai_mode_is_opt_in(self):
+        import inspect
+        self.assertFalse(inspect.signature(api.improve_resume).parameters['use_ai'].default.default)

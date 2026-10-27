@@ -140,4 +140,11 @@ SKILL_DISPLAY_NAMES = {
     "python automation": "Python Automation", "watchdog": "Watchdog",
     "ocr": "OCR", "power bi": "Power BI", "tableau": "Tableau",
     "git": "Git", "github": "GitHub", "ci/cd": "CI/CD", "ids/ips": "IDS/IPS",
+    # Acronyms and brand casing that title-case would get wrong ("Aws", "Graphql").
+    "aws": "AWS", "gcp": "GCP", "golang": "Go", "graphql": "GraphQL", "html": "HTML",
+    "css": "CSS", "php": "PHP", "jquery": "jQuery", "vue": "Vue", "edr": "EDR",
+    "soc": "SOC", "nist": "NIST", "hris": "HRIS", "kape": "KAPE", "siem": "SIEM",
+    "iso 27001": "ISO 27001", "mitre att&ck": "MITRE ATT&CK", "mitre": "MITRE",
+    "att&ck mapping": "ATT&CK Mapping", "azure ad": "Azure AD", "cloudtrail": "CloudTrail",
+    "elastic siem": "Elastic SIEM", "tailwind css": "Tailwind CSS",
 }

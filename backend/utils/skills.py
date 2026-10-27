@@ -67,6 +67,11 @@ def find_known_skills(text: str) -> list:
     return [skill.lower() for skill in extract_known_skills(text, structured=True)]
 
 
+def display_skill(key):
+    """Human-readable name for a canonical skill key."""
+    return SKILL_DISPLAY_NAMES.get(key, key.title() if key.islower() else key)
+
+
 def canonical_skill(value):
     """Canonicalize a complete skill label, including historical candidate data."""
     value = unicodedata.normalize('NFKC', value).replace('\u00ad', '').replace('\u200b', '').replace('\u2011', '-')

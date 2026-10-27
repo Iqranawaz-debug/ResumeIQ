@@ -54,6 +54,8 @@ async function analyze(jd = '') {
   await button(jd ? 'Analyze Against Job Description' : 'Evaluate Resume Only').click()
   const r = await response; assert.equal(r.status(), 200); analysis = (await r.json()).analysis
   await heading('Analysis Result')
+  // Results are tabbed; improvement scenarios work in the Improve tab.
+  await page.getByRole('tab', { name: 'Improve' }).click()
 }
 const workspace = () => page.getByRole('region', { name: 'Resume improvement workspace' })
 try {
@@ -132,8 +134,8 @@ try {
       assert.ok((await workspace().innerText()).includes(value === 'complete' ? '1 completed' : value === 'not_applicable' ? '1 not applicable' : '0 completed'))
     }
   })
-  await scenario('Improvement workspace offers no AI rewrite action', async () => {
-    assert.equal(await workspace().getByRole('button', { name: /AI/ }).count(), 0)
+  await scenario('AI wording suggestions are an explicit, separate action', async () => {
+    assert.equal(await workspace().getByRole('button', { name: 'Suggest stronger wording with AI' }).count(), 1)
   })
   await scenario('Improvement TXT contains original current edits and decisions', async () => {
     const card = workspace().locator('article').first()
@@ -146,7 +148,7 @@ try {
     for (const part of ['Verified résumé wording — SQL', 'accepted', 'Original: Utilized Python', 'User edited: yes']) assert.ok(text.includes(part), part)
   })
   await scenario('Analysis TXT downloads current candidate and server score', async () => {
-    const event = page.waitForEvent('download'); await button('Download Recommendation').click()
+    const event = page.waitForEvent('download'); await button('Download summary (.txt)').click()
     const download = await event; const file = resolve(out, 'analysis.txt'); await download.saveAs(file)
     const text = await readFile(file, 'utf8'); assert.ok(text.includes('Alex Example')); assert.ok(text.includes(`Overall Score: ${analysis.overall_score}`))
   })
