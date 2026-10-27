@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import BrandMark from './BrandMark'
 import ThemeToggle from './ThemeToggle'
+import { API_BASE_URL, apiRequest } from './api'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
 const SIGNUP_URL = `${API_BASE_URL}/api/signup`
 const LOGIN_URL = `${API_BASE_URL}/api/login`
 
@@ -38,17 +38,11 @@ function Auth({ onAuthSuccess, theme, onToggleTheme }) {
         : { email, password, full_name: fullName, company }
 
     try {
-      const response = await fetch(url, {
+      const data = await apiRequest(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Something went wrong.')
-      }
-
       onAuthSuccess(data.token, data.username)
     } catch (err) {
       setError(err.message || 'Could not reach the server.')

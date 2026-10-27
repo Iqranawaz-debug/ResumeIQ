@@ -2,6 +2,7 @@ import json
 
 from ai.openrouter_client import MODEL, get_client
 from ai.schemas import AISkillCategorization
+from ai.privacy import redact_text
 
 CATEGORIZE_PROMPT = (
     "Given this list of skills extracted from a resume, group them into clear, "
@@ -32,6 +33,8 @@ def categorize_skills_ai(skills: list) -> dict:
     """
     if not skills:
         return {}
+    if any(redact_text(skill) != skill for skill in skills):
+        raise ValueError("Contact-like content must use local categorization.")
 
     client = get_client()
     completion = client.chat.completions.create(

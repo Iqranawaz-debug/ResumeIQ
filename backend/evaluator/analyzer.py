@@ -1,6 +1,7 @@
 from ai.matcher import match_resume_to_job_ai
 from ai.openrouter_client import MODEL
 from evaluator.evaluator import evaluate_candidate
+from evaluator.explanation import explain
 from evaluator.recommendation import generate_interview_questions
 from evaluator.scorer import determine_recommendation
 from matcher.matcher import match_resume_to_job
@@ -9,7 +10,7 @@ RESUME_QUALITY_WEIGHT = 0.3
 JOB_FIT_WEIGHT = 0.7
 
 
-def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
+def analyze_resume_for_job(candidate: dict, job_description: str = "", *, use_ai: bool = True) -> dict:
     """Combine general resume quality with job-description fit into a
     single score and recommendation.
 
@@ -19,7 +20,7 @@ def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
     job_description = (job_description or "").strip()
 
     if not job_description:
-        return {
+        result = {
             "overall_score": general_eval["resume_score"],
             "recommendation": general_eval["recommendation"],
             "resume_quality_score": general_eval["resume_score"],
@@ -42,7 +43,13 @@ def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
             "radar": general_eval["radar"],
         }
 
+        result["explanation"] = explain(candidate, job_description, result)
+        return result
+
+    processing_note = None
     try:
+        if not use_ai:
+            raise RuntimeError('Local analysis requested')
         job_match = match_resume_to_job_ai(candidate, job_description)
         job_fit_method = "ai"
         job_fit_model = MODEL
@@ -50,11 +57,15 @@ def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
         job_match = match_resume_to_job(candidate, job_description)
         job_fit_method = "rule-based"
         job_fit_model = None
+        processing_note = ("AI unavailable or response invalid; local matching was used." if use_ai
+                           else "Local matching requested; no provider call was made.")
 
     overall_score = round(
         general_eval["resume_score"] * RESUME_QUALITY_WEIGHT
         + job_match["overall_score"] * JOB_FIT_WEIGHT
     )
+
+    blend_before_cap = overall_score
 
     # A confirmed weak job fit should never be rescued by a polished resume —
     # a great resume for the wrong role is still the wrong role. Without this,
@@ -89,7 +100,7 @@ def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
     else:
         interview_questions = generate_interview_questions(candidate, job_match["missing_skills"])
 
-    return {
+    result = {
         "overall_score": overall_score,
         "recommendation": recommendation,
         "resume_quality_score": general_eval["resume_score"],
@@ -97,6 +108,7 @@ def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
         "job_fit_score": job_match["overall_score"],
         "job_fit_label": job_match["match_label"],
         "job_fit_method": job_fit_method,
+        "processing_note": processing_note,
         "job_fit_model": job_fit_model,
         "extracted_requirements": job_match.get("extracted_requirements"),
         "experience_level": general_eval["experience_level"],
@@ -113,3 +125,13 @@ def analyze_resume_for_job(candidate: dict, job_description: str = "") -> dict:
         "interview_questions": interview_questions,
         "radar": general_eval["radar"],
     }
+
+    result["explanation"] = explain(candidate, job_description, result, job_match, {
+        "resume_quality_weight": RESUME_QUALITY_WEIGHT, "job_fit_weight": JOB_FIT_WEIGHT,
+        "resume_quality_points": general_eval["resume_score"] * RESUME_QUALITY_WEIGHT,
+        "job_fit_points": job_match["overall_score"] * JOB_FIT_WEIGHT,
+        "rounded_before_cap": blend_before_cap,
+        "weak_fit_cap": 49 if job_match["match_label"] == "Weak Match" else None,
+        "final_score": overall_score,
+    })
+    return result

@@ -1,3 +1,4 @@
+from utils.limits import bound_text
 from parser.docx_parser import extract_text_from_docx
 from parser.pdf_parser import extract_text_from_pdf
 
@@ -15,6 +16,9 @@ def parse_document(filename: str, file_bytes: bytes) -> str:
     if extension == "docx":
         return extract_text_from_docx(file_bytes)
     if extension == "txt":
-        return file_bytes.decode("utf-8", errors="ignore")
+        text = file_bytes.decode("utf-8-sig")
+        if "\x00" in text:
+            raise ValueError("Binary content is not supported as text.")
+        return bound_text(text)
 
     raise ValueError(f"Unsupported file type: {extension}")

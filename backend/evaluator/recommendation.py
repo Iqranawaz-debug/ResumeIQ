@@ -14,18 +14,18 @@ def generate_strengths(
     strengths = []
 
     if skills_count >= 5:
-        strengths.append("Good technical skill coverage.")
+        strengths.append("At least five skills were extracted; proficiency is not verified.")
     if candidate.get("education"):
-        strengths.append("Clear educational background.")
+        strengths.append("Education text is present; completion is not verified.")
 
     experience = candidate.get("experience") or []
     if experience and any(entry.get("details") for entry in experience):
-        strengths.append("Relevant, detailed work experience.")
+        strengths.append("Employment entries include descriptions.")
 
     if candidate.get("email") and candidate.get("phone"):
         strengths.append("Complete contact information.")
     if total_experience_years >= 3:
-        strengths.append("Solid track record of professional experience.")
+        strengths.append("Dated employment ranges document at least three years under the current tenure rule.")
 
     return strengths
 
@@ -50,7 +50,7 @@ def generate_weaknesses(
         weaknesses.append("Contact information is incomplete.")
 
     if not weaknesses:
-        weaknesses.append("No major weaknesses identified from the resume alone.")
+        weaknesses.append("No additional document gaps identified by these limited rules; human review is still needed.")
 
     return weaknesses
 
@@ -101,7 +101,7 @@ def generate_suggestions(
 
     if not suggestions:
         suggestions.append(
-            "Resume looks complete — proceed to the next step in the screening process."
+            "The expected resume sections are present; verify their evidence through human review."
         )
 
     return suggestions

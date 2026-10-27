@@ -20,4 +20,5 @@ def get_client() -> OpenAI:
         base_url=OPENROUTER_BASE_URL,
         api_key=api_key,
         timeout=REQUEST_TIMEOUT_SECONDS,
+        max_retries=0,
     )

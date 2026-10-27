@@ -1,7 +1,5 @@
-import re
 from datetime import date
 
-YEAR_PATTERN = re.compile(r"\b(?:19|20)\d{2}\b")
 
 REQUIRED_SECTIONS = ["name", "email", "phone", "skills", "education", "experience"]
 
@@ -24,22 +22,22 @@ def calculate_skills_count(candidate: dict) -> int:
     return len(candidate.get("skills") or [])
 
 
-def _extract_years(duration):
-    if not duration:
-        return []
-    years = [int(y) for y in YEAR_PATTERN.findall(duration)]
-    if re.search(r"present", duration, re.IGNORECASE):
-        years.append(date.today().year)
-    return years
+def calculate_total_experience_years(candidate: dict) -> float:
+    """Union compatible written ranges; exclude gaps and uncertain dates."""
+    from utils.employment_dates import interval
 
-
-def calculate_total_experience_years(candidate: dict) -> int:
-    all_years = []
+    ranges = []
     for entry in candidate.get("experience") or []:
-        all_years.extend(_extract_years(entry.get("duration")))
-    if not all_years:
-        return 0
-    return max(all_years) - min(all_years)
+        value, _ = interval(entry.get("duration"), today=date.today())
+        if value:
+            ranges.append(value)
+    merged = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return round(sum(end - start for start, end in merged) / 12, 2)
 
 
 def determine_experience_level(total_years: int) -> str:

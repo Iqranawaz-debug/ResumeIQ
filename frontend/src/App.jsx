@@ -3,16 +3,19 @@ import Auth from './Auth'
 import BrandMark from './BrandMark'
 import ThemeToggle from './ThemeToggle'
 import PrintableReport from './PrintableReport'
+import ExplainableResults from './ExplainableResults'
+import RecruiterWorkspace from './RecruiterWorkspace'
+import ImprovementWorkspace from './ImprovementWorkspace'
+import { initializeDraft, updateDraft } from './improvementState'
 import './App.css'
+import { API_BASE_URL, apiRequest, analysisForm } from './api'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
 const UPLOAD_URL = `${API_BASE_URL}/api/upload`
 const ANALYZE_URL = `${API_BASE_URL}/api/analyze`
 const HISTORY_URL = `${API_BASE_URL}/api/history`
 const LOGOUT_URL = `${API_BASE_URL}/api/logout`
 const ALLOWED_EXTENSIONS = ['pdf', 'docx']
 const MAX_FILE_SIZE_MB = 10
-const TOTAL_STEPS = 4
 
 const STEP_COPY = {
   1: { eyebrow: 'STEP 1 OF 4', title: 'Upload a resume', subtitle: "Bring a candidate's resume — we'll extract the key details." },
@@ -71,15 +74,60 @@ function App() {
   const [jdInputMode, setJdInputMode] = useState('text') // text | file
   const [jobDescription, setJobDescription] = useState('')
   const [jdFile, setJdFile] = useState(null)
+  const [useAI, setUseAI] = useState(false)
   const [analysisStatus, setAnalysisStatus] = useState('idle') // idle | analyzing | success | error
   const [analysisMessage, setAnalysisMessage] = useState('')
   const [analysis, setAnalysis] = useState(null)
+  const [improvements, setImprovements] = useState(null)
+  const [improvementDraft, setImprovementDraft] = useState(null)
+  const [improvementBusy, setImprovementBusy] = useState(false)
+  const [improvementError, setImprovementError] = useState('')
+  const improvementRequest = useRef(null)
   const [history, setHistory] = useState([])
   const [uploadedFile, setUploadedFile] = useState(null)
   const [historySearch, setHistorySearch] = useState('')
 
+  const uploadRequest = useRef(null)
+  const analysisRequest = useRef(null)
+  const [resumeId, setResumeId] = useState(null)
+  const [processingNote, setProcessingNote] = useState('')
+  const [historyError, setHistoryError] = useState('')
   const inputRef = useRef(null)
   const jdFileRef = useRef(null)
+
+  useEffect(() => () => improvementRequest.current?.abort(), [])
+
+  function clearImprovements() {
+    improvementRequest.current?.abort()
+    improvementRequest.current = null
+    setImprovements(null)
+    setImprovementDraft(null)
+    setImprovementBusy(false)
+    setImprovementError('')
+  }
+
+  async function generateImprovements() {
+    if (!resumeId || !analysis?.analysis_id) return
+    improvementRequest.current?.abort()
+    const controller = new AbortController()
+    improvementRequest.current = controller
+    setImprovementBusy(true)
+    setImprovementError('')
+    const body = new FormData()
+    body.append('resume_id', resumeId)
+    body.append('analysis_id', analysis.analysis_id)
+    try {
+      const data = await apiRequest(`${API_BASE_URL}/api/improvements`, { method: 'POST', body,
+        signal: controller.signal, headers: { Authorization: `Bearer ${token}` } })
+      if (controller.signal.aborted || improvementRequest.current !== controller || data.resume_id !== resumeId || data.analysis_id !== analysis.analysis_id) return
+      setImprovements(data.improvements)
+      setImprovementDraft((previous) => initializeDraft(data.improvements, previous || {}))
+    } catch (error) {
+      if (!controller.signal.aborted && improvementRequest.current === controller) setImprovementError(error.message)
+    } finally {
+      if (!controller.signal.aborted && improvementRequest.current === controller) setImprovementBusy(false)
+    }
+  }
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -92,19 +140,19 @@ function App() {
 
   useEffect(() => {
     if (!token) return
-    fetch(HISTORY_URL, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
-        if (res.status === 401) {
-          localStorage.removeItem('resumeiq_token')
-          localStorage.removeItem('resumeiq_username')
-          setToken(null)
-          setUsername(null)
-          return { history: [] }
-        }
-        return res.ok ? res.json() : { history: [] }
-      })
-      .then((data) => setHistory(data.history || []))
-      .catch(() => {})
+    const controller = new AbortController()
+    setHistoryError('')
+    apiRequest(HISTORY_URL, { signal: controller.signal, headers: { Authorization: `Bearer ${token}` } })
+      .then((data) => { if (!controller.signal.aborted) setHistory(data.history || []) })
+      .catch((error) => { if (!controller.signal.aborted) setHistoryError(error.message) })
+    const expired = (event) => {
+      if (event.detail === `Bearer ${token}`) clearSession()
+    }
+    window.addEventListener('resumeiq-session-expired', expired)
+    return () => {
+      controller.abort()
+      window.removeEventListener('resumeiq-session-expired', expired)
+    }
   }, [token])
 
   function handleAuthSuccess(newToken, newUsername) {
@@ -115,14 +163,23 @@ function App() {
   }
 
   async function handleLogout() {
+    clearImprovements()
+    uploadRequest.current?.abort()
+    analysisRequest.current?.abort()
     try {
-      await fetch(LOGOUT_URL, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      await apiRequest(LOGOUT_URL, { method: 'POST', timeoutMs: 10000, headers: { Authorization: `Bearer ${token}` } })
     } catch {
-      // ignore network errors on logout
+      // Local sign-out still completes; server token expires if revocation could not arrive.
     }
+    clearSession()
+  }
+
+  function clearSession() {
+    clearImprovements()
+    uploadRequest.current?.abort()
+    analysisRequest.current?.abort()
+    setResumeId(null)
+    setProcessingNote('')
     localStorage.removeItem('resumeiq_token')
     localStorage.removeItem('resumeiq_username')
     setToken(null)
@@ -145,80 +202,75 @@ function App() {
   }
 
   async function uploadFile(file) {
+    uploadRequest.current?.abort()
+    analysisRequest.current?.abort()
+    const controller = new AbortController()
+    uploadRequest.current = controller
+    setAnalysisStatus('idle')
     const clientError = validateFile(file)
     if (clientError) {
       setUploadStatus('error')
       setUploadMessage(clientError)
-      setFileName('')
-      setCandidate(null)
-      setAnalysis(null)
-      setAnalysisStatus('idle')
-      setUploadedFile(null)
       return
     }
 
     setUploadStatus('uploading')
     setUploadMessage('')
-    setAnalysis(null)
-    setAnalysisStatus('idle')
 
     const formData = new FormData()
     formData.append('file', file)
 
     try {
-      const response = await fetch(UPLOAD_URL, {
+      const data = await apiRequest(UPLOAD_URL, {
+        signal: controller.signal,
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Upload failed.')
-      }
-
+      if (controller.signal.aborted || uploadRequest.current !== controller) return
+      clearImprovements()
+      setAnalysis(null)
+      setResumeId(data.resume_id)
+      setProcessingNote(`Skill categorization: ${data.categorization_method}. ${data.processing_note || ''}`)
       setUploadStatus('success')
       setUploadMessage(data.message)
       setFileName(data.filename)
       setCandidate(data.candidate || null)
       setUploadedFile(file)
     } catch (err) {
+      if (controller.signal.aborted || uploadRequest.current !== controller) return
       setUploadStatus('error')
       setUploadMessage(err.message || 'Could not reach the server.')
-      setFileName('')
-      setCandidate(null)
-      setUploadedFile(null)
     }
   }
 
   async function handleAnalyze() {
+    clearImprovements()
+    analysisRequest.current?.abort()
+    const controller = new AbortController()
+    analysisRequest.current = controller
     setAnalysisStatus('analyzing')
     setAnalysisMessage('')
 
-    const formData = new FormData()
-    if (jdInputMode === 'file' && jdFile) {
-      formData.append('file', jdFile)
-    } else {
-      formData.append('job_description', jobDescription)
-    }
+    const formData = analysisForm(jdInputMode, jobDescription, jdFile, resumeId, useAI)
 
     try {
-      const response = await fetch(ANALYZE_URL, {
+      const data = await apiRequest(ANALYZE_URL, {
+        signal: controller.signal,
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Analysis failed.')
+      if (controller.signal.aborted || analysisRequest.current !== controller) return
+      if (!Number.isFinite(data.analysis?.overall_score)) {
+        throw new Error('Server returned an incomplete analysis. Please retry.')
       }
-
       setAnalysisStatus('success')
       setAnalysis(data.analysis)
       setHistory(data.history || [])
       setCurrentStep(4)
     } catch (err) {
+      if (controller.signal.aborted || analysisRequest.current !== controller) return
       setAnalysisStatus('error')
       setAnalysisMessage(err.message || 'Could not reach the server.')
       setAnalysis(null)
@@ -265,10 +317,10 @@ function App() {
         `Combined (Overall): ${analysis.overall_score} / 100 - ${analysis.recommendation}`,
       )
       if (analysis.matched_skills.length > 0) {
-        lines.push('', 'MATCHED SKILLS', ...analysis.matched_skills.map((s) => `- ${s}`))
+        lines.push('', analysis.job_fit_method === 'ai' ? 'PROVIDER-REPORTED MATCHES (UNVERIFIED)' : 'MATCHED SKILLS', ...analysis.matched_skills.map((s) => `- ${s}`))
       }
       if (analysis.missing_skills.length > 0) {
-        lines.push('', 'MISSING SKILLS', ...analysis.missing_skills.map((s) => `- ${s}`))
+        lines.push('', 'REQUIREMENTS NOT EVIDENCED', ...analysis.missing_skills.map((s) => `- ${s}`))
       }
     }
 
@@ -282,6 +334,15 @@ function App() {
       lines.push('', 'SUGGESTIONS', ...analysis.suggestions.map((s) => `- ${s}`))
     }
 
+    if (analysis.explanation) {
+      lines.push('', 'SCORE EXPLANATION', analysis.explanation.summary, analysis.explanation.advisory)
+      if (analysis.explanation.job_rule) lines.push(analysis.explanation.job_rule)
+      for (const requirement of analysis.explanation.requirements || []) {
+        lines.push(`${requirement.skill}: ${requirement.status === 'matched' ? 'Listed skill match' : 'Not evidenced in resume'}`)
+        for (const evidence of requirement.evidence || []) lines.push(`${evidence.section}: "${evidence.excerpt}"`)
+      }
+      lines.push('', 'RECOMMENDED IMPROVEMENTS', ...(analysis.explanation.recommendations || []))
+    }
     const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -306,6 +367,11 @@ function App() {
   }
 
   function handleStartOver() {
+    clearImprovements()
+    uploadRequest.current?.abort()
+    analysisRequest.current?.abort()
+    setResumeId(null)
+    setProcessingNote('')
     setCurrentStep(1)
     setUploadStatus('idle')
     setUploadMessage('')
@@ -340,6 +406,7 @@ function App() {
         </div>
 
         <nav className="sidebar-nav">
+          <button type="button" className={`sidebar-nav-item ${activePage === 'recruiter' ? 'active' : ''}`} onClick={() => setActivePage('recruiter')}>Recruitment</button>
           <button
             type="button"
             className={`sidebar-nav-item ${activePage === 'upload' ? 'active' : ''}`}
@@ -365,6 +432,7 @@ function App() {
       </aside>
 
       <main className="main-content">
+        {activePage === 'recruiter' && <RecruiterWorkspace key={token} token={token} />}
         {activePage === 'upload' && (
           <div className="wizard">
             <p className="eyebrow">{step.eyebrow}</p>
@@ -375,6 +443,15 @@ function App() {
               <div className="wizard-panel">
                 <div
                   className={`dropzone dropzone-hero ${isDragging ? 'dragging' : ''} ${uploadStatus}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload resume file"
+                  onKeyDown={(event) => {
+                    if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault()
+                      inputRef.current?.click()
+                    }
+                  }}
                   onClick={() => inputRef.current?.click()}
                   onDragOver={(e) => {
                     e.preventDefault()
@@ -405,13 +482,13 @@ function App() {
                 )}
                 {uploadStatus === 'error' && <p className="status error">{uploadMessage}</p>}
 
-                <p className="wizard-note">We only read the file to extract text — nothing is stored beyond this session.</p>
+                <p className="wizard-note">The file itself is not kept. Extracted details and results stay in server memory until you upload another resume or the server restarts; logging out does not erase them.</p>
 
                 <div className="wizard-actions">
                   <button
                     type="button"
                     className="evaluate-button"
-                    disabled={!candidate}
+                    disabled={!candidate || uploadStatus === 'uploading'}
                     onClick={() => setCurrentStep(2)}
                   >
                     Continue
@@ -430,6 +507,7 @@ function App() {
                       </button>
                     )}
                   </div>
+                  <p className="field-label" role="status">{processingNote}</p>
                   <p><strong>Name:</strong> {candidate.name || 'Not found'}</p>
                   <p><strong>Email:</strong> {candidate.email || 'Not found'}</p>
                   <p><strong>Phone:</strong> {candidate.phone || 'Not found'}</p>
@@ -471,16 +549,19 @@ function App() {
                     <p className="not-found">Not found</p>
                   )}
 
-                  <p className="field-label"><strong>Experience</strong></p>
-                  {candidate.experience.length > 0 ? (
+                  <p className="field-label"><strong>Professional Experience</strong></p>
+                  {(candidate.experience || []).length > 0 ? (
                     <ul className="experience-list">
                       {candidate.experience.map((exp, i) => (
                         <li key={i}>
                           <div className="experience-title">
-                            {exp.title}
+                            {exp.title || 'Position not specified'}
+                            {exp.organization ? ` — ${exp.organization}` : ''}
                             {exp.duration ? ` (${exp.duration})` : ''}
                           </div>
-                          {exp.details.length > 0 && (
+                          {(exp.header_lines || []).map((line, j) => <p key={`header-${j}`}>{line}</p>)}
+                          {exp.date_status === 'invalid' && <p className="field-label">Date range needs review</p>}
+                          {(exp.details || []).length > 0 && (
                             <ul>
                               {exp.details.map((detail, j) => (
                                 <li key={j}>{detail}</li>
@@ -493,6 +574,19 @@ function App() {
                   ) : (
                     <p className="not-found">Not found</p>
                   )}
+                  <p className="field-label"><strong>Projects &amp; Open Source</strong></p>
+                  {(candidate.projects || []).length > 0 ? (
+                    <ul className="experience-list">
+                      {candidate.projects.map((project, i) => (
+                        <li key={i}>
+                          {project.title && <div className="experience-title">{project.title}</div>}
+                          {(project.details || []).length > 0 && (
+                            <ul>{project.details.map((detail, j) => <li key={j}>{detail}</li>)}</ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className="not-found">Not found</p>}
                 </div>
 
                 <div className="wizard-actions">
@@ -533,6 +627,7 @@ function App() {
 
                   {jdInputMode === 'text' ? (
                     <textarea
+                      aria-label="Job description"
                       className="job-description-input"
                       placeholder="Paste the job description here..."
                       value={jobDescription}
@@ -542,6 +637,15 @@ function App() {
                   ) : (
                     <div
                       className="dropzone jd-dropzone"
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Upload job description file"
+                      onKeyDown={(event) => {
+                        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                          event.preventDefault()
+                          jdFileRef.current?.click()
+                        }
+                      }}
                       onClick={() => jdFileRef.current?.click()}
                     >
                       <input
@@ -556,6 +660,18 @@ function App() {
                       </p>
                       <p className="dropzone-hint">PDF, DOCX, or TXT</p>
                     </div>
+                  )}
+
+                  {hasJobDescription && (
+                    <>
+                      <label className="ai-opt-in">
+                        <input type="checkbox" checked={useAI} onChange={(e) => setUseAI(e.target.checked)} />
+                        Use AI job matching
+                      </label>
+                      <p className="wizard-note">
+                        When checked, extracted skills, education and employment details (with best-effort contact redaction) and the job description are sent to the configured AI provider. If it is unavailable, local matching is used.
+                      </p>
+                    </>
                   )}
 
                   {analysisStatus === 'error' && <p className="status error">{analysisMessage}</p>}
@@ -583,6 +699,8 @@ function App() {
             {currentStep === 4 && analysis && (
               <div className="wizard-panel">
                 <div className="evaluation-card">
+                  <p className="field-label" role="status">{analysis.job_fit_method === 'ai' ? 'AI-assisted job matching' : 'Local analysis'}. {analysis.processing_note}</p>
+                  <p className="wizard-note">Indicative document review, not an official ATS score or hiring probability. Verify all evidence before making decisions.</p>
                   <div className="candidate-card-header">
                     <button type="button" className="link-button" onClick={handleDownloadRecommendation}>
                       Download Recommendation
@@ -596,6 +714,7 @@ function App() {
                       </div>
                     </div>
                     <div>
+                      <p className="field-label">Advisory score band</p>
                       <p className={`recommendation-badge ${RECOMMENDATION_CLASS[analysis.recommendation] || ''}`}>
                         {analysis.recommendation}
                       </p>
@@ -652,10 +771,16 @@ function App() {
                         </table>
                       </div>
                       <p className="comparison-formula">
-                        Overall Score = Resume Quality (30%) + Job Description Match (70%)
+                        Overall Score = round(Resume Quality × 30% + Job Description Match × 70%); capped at 49 for a weak job fit.
                       </p>
                     </>
                   )}
+
+                  <ExplainableResults explanation={analysis.explanation} />
+                  <ImprovementWorkspace data={improvements} draft={improvementDraft}
+                    busy={improvementBusy} error={improvementError} canGenerate={Boolean(resumeId && analysis.analysis_id)}
+                    onGenerate={generateImprovements}
+                    onAction={(action) => setImprovementDraft((draft) => updateDraft(improvements, draft, action))} />
 
                   <div className="eval-stats">
                     <div>
@@ -678,7 +803,7 @@ function App() {
                     </div>
                   )}
 
-                  {analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
+                  {!analysis.explanation && analysis.job_fit_score !== null && analysis.job_fit_score !== undefined && (
                     <>
                       {analysis.matched_skills.length === 0 && analysis.missing_skills.length === 0 ? (
                         <>
@@ -701,7 +826,7 @@ function App() {
                             <p className="not-found">None of the required skills were found on the resume</p>
                           )}
 
-                          <p className="field-label"><strong>Missing Skills</strong></p>
+                          <p className="field-label"><strong>Requirements Not Evidenced</strong></p>
                           {analysis.missing_skills.length > 0 ? (
                             <ul className="skill-list skill-list-missing">
                               {analysis.missing_skills.map((skill) => (
@@ -722,6 +847,7 @@ function App() {
                   {analysis.radar && (
                     <>
                       <p className="field-label"><strong>Candidate Strength Radar</strong></p>
+                      <p className="wizard-note">Document indicators from the existing rules; these do not verify proficiency, personality, or hiring suitability.</p>
                       <div className="breakdown radar-breakdown">
                         {RADAR_LABELS.map(({ key, label }) => (
                           <div className="breakdown-row" key={key}>
@@ -736,7 +862,8 @@ function App() {
                     </>
                   )}
 
-                  <p className="field-label"><strong>Strengths</strong></p>
+                  {analysis.job_fit_method === 'ai' && <p className="wizard-note">The following narrative is AI-generated and unverified. Use the local evidence checks above and human review.</p>}
+                  <p className="field-label"><strong>Resume observations</strong></p>
                   {analysis.strengths.length > 0 ? (
                     <ul>
                       {analysis.strengths.map((item, i) => (
@@ -747,7 +874,7 @@ function App() {
                     <p className="not-found">None identified</p>
                   )}
 
-                  <p className="field-label"><strong>Weaknesses</strong></p>
+                  <p className="field-label"><strong>Review considerations</strong></p>
                   {analysis.weaknesses && analysis.weaknesses.length > 0 ? (
                     <ul>
                       {analysis.weaknesses.map((item, i) => (
@@ -798,6 +925,7 @@ function App() {
           <div className="wizard">
             <p className="eyebrow">/ HISTORY</p>
             <h1>Evaluation History</h1>
+            {historyError && <p className="status error" role="alert">{historyError}</p>}
             <p className="subtitle">Your last {history.length} evaluation{history.length === 1 ? '' : 's'}.</p>
 
             {history.length > 0 ? (
@@ -847,7 +975,7 @@ function App() {
         )}
       </main>
 
-      <PrintableReport candidate={candidate} analysis={analysis} />
+      <PrintableReport candidate={candidate} analysis={analysis} improvements={improvements} improvementDraft={improvementDraft} />
     </div>
   )
 }

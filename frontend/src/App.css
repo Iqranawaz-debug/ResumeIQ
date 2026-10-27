@@ -118,6 +118,16 @@
   font-style: italic;
 }
 
+.ai-opt-in {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
 .candidate-card-header {
   display: flex;
   justify-content: flex-end;
@@ -1100,4 +1110,49 @@ li {
   @page {
     margin: 1.5cm;
   }
+}
+
+/* Evidence uses the current theme and reflows without fixed card widths. */
+.match-explanation { margin-block: 1.5rem; overflow-wrap: anywhere; }
+.match-explanation h2 { font-size: 1.25rem; }
+.match-explanation h3 { font-size: 1rem; margin-top: 1.5rem; }
+.requirements-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1.25rem; }
+.explanation-components, .evidence-list { padding-left: 1.25rem; }
+.evidence-list > li { margin-block: 1rem; }
+.evidence-list figure { margin: .75rem 0; }
+.evidence-list blockquote { margin: 0; padding: .75rem; border-left: 3px solid currentColor; white-space: pre-wrap; }
+.evidence-list figcaption { margin-top: .35rem; font-size: .85rem; }
+.match-explanation progress { width: 100%; min-width: 0; accent-color: #8b5cf6; }
+.match-explanation .breakdown-row { flex-wrap: wrap; gap: .5rem; }
+.match-explanation summary { cursor: pointer; margin-top: 1rem; }
+.improvement-workspace { margin-block: 2rem; overflow-wrap: anywhere; }
+.improvement-card { border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin-block: 1rem; }
+.improvement-card blockquote { white-space: pre-wrap; margin: .5rem 0; }
+.improvement-card textarea { box-sizing: border-box; width: 100%; resize: vertical; background: var(--bg); color: inherit; font: inherit; border: 1px solid var(--border); border-radius: 8px; padding: .75rem; }
+.improvement-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.improvement-checklist { padding-left: 1.25rem; }
+.improvement-checklist li { margin-block: 1rem; }
+.improvement-checklist select { display: block; margin-top: .5rem; background: var(--bg); color: inherit; font: inherit; padding: .5rem; }
+.improvement-report pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.dropzone:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.recruiter-workspace { max-width: 1200px; margin: auto; overflow-wrap: anywhere; }
+.recruiter-workspace label { display: flex; flex-direction: column; gap: .4rem; margin-block: .75rem; }
+.recruiter-workspace input:not([type=checkbox]), .recruiter-workspace textarea, .recruiter-workspace select { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: var(--text-strong); background: var(--surface-solid); padding: .65rem; border: 1px solid var(--border-strong); border-radius: 8px; }
+.recruiter-workspace button { font: inherit; cursor: pointer; margin: .3rem; padding: .5rem .8rem; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-strong); background: var(--surface-solid); }
+.recruiter-workspace button:disabled { opacity: .5; cursor: not-allowed; }
+.recruiter-workspace :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.recruiter-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: .75rem; }
+.recruiter-table { overflow-x: auto; width: 100%; margin-block: 1rem; }
+.recruiter-table table { border-collapse: collapse; min-width: 680px; width: 100%; }
+.recruiter-table th, .recruiter-table td { padding: .6rem; border: 1px solid var(--border); text-align: left; vertical-align: top; max-width: 260px; }
+.recruiter-comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; margin-block: 1rem; }
+.recruiter-comparison > article { min-width: 0; }
+.recruiter-comparison .breakdown-row { grid-template-columns: 1fr; gap: .35rem; margin-block: .8rem; }
+@media print { .match-explanation details { display: block; } .match-explanation { color: #111; } }
+@media print {
+  :root, :root[data-theme='dark'] { color-scheme: light; background: #fff; }
+  body, :root[data-theme='dark'] body, .app-shell { background: #fff; }
+  .print-report { --text: #334155; --text-strong: #111827; --text-dim: #475569; }
+  .improvement-report { break-inside: auto; page-break-inside: auto; }
+  .print-report h2, .print-report h3 { break-after: avoid; page-break-after: avoid; }
 }

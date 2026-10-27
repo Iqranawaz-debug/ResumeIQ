@@ -1,25 +1,13 @@
 import re
 
-from utils.skills import find_known_skills
+from utils.skills import extract_known_skills
+from extractor.employment import employment, projects
+from utils.employment_dates import DATE_PATTERN
+from extractor.evidence import collect_skill_evidence
 
 EMAIL_PATTERN = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 PHONE_PATTERN = re.compile(r"(\+?\d[\d\-\s()]{7,}\d)")
 YEAR_PATTERN = re.compile(r"\b(19|20)\d{2}\b")
-MONTH = (
-    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
-    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
-)
-DURATION_LINE_PATTERN = re.compile(
-    rf"^(?:{MONTH}\.?\s+)?(19|20)\d{{2}}\s*[-–—]\s*"
-    rf"(?:(?:{MONTH}\.?\s+)?(19|20)\d{{2}}|present)\.?$",
-    re.IGNORECASE,
-)
-INLINE_DURATION_PATTERN = re.compile(
-    rf"\s*\(\s*(?:{MONTH}\.?\s+)?(19|20)\d{{2}}\s*[-–—]\s*"
-    rf"(?:(?:{MONTH}\.?\s+)?(19|20)\d{{2}}|present)\s*\)",
-    re.IGNORECASE,
-)
-
 SECTION_HEADERS = {
     "skills": [
         "technical skills",
@@ -33,6 +21,7 @@ SECTION_HEADERS = {
         "professional experience",
         "work experience",
         "employment history",
+        "career history",
         "work history",
         "relevant experience",
         "internship experience",
@@ -41,7 +30,9 @@ SECTION_HEADERS = {
         "internship",
         "internships",
     ],
-    "projects": ["projects", "project experience", "personal projects", "academic projects"],
+    "projects": ["projects", "project experience", "personal projects", "academic projects",
+                 "featured projects", "portfolio projects", "selected projects", "research projects",
+                 "earlier projects & open source", "open source contributions", "open source"],
     "certifications": [
         "certification",
         "certifications",
@@ -78,16 +69,35 @@ def _lines(text):
 
 
 def _find_headers(lines):
+    # Longest exact heading first, including up to three PDF-wrapped lines.
+    phrases = {phrase: category for category, values in SECTION_HEADERS.items() for phrase in values}
     headers = []
-    for index, line in enumerate(lines):
-        normalized = line.strip(":").strip().lower()
-        if not normalized or len(normalized.split()) > 4:
-            continue
-        for category, phrases in SECTION_HEADERS.items():
+    index = 0
+    while index < len(lines):
+        found = False
+        for width in (3, 2, 1):
+            chunk = lines[index:index + width]
+            if len(chunk) != width or not all(chunk):
+                continue
+            normalized = " ".join(" ".join(chunk).strip(" :.–—-•*#").lower().split())
             if normalized in phrases:
-                headers.append((index, category))
+                headers.append((index, phrases[normalized]))
+                # Blank continuation lines so all consumers retain (index, category).
+                for offset in range(1, width):
+                    lines[index + offset] = ""
+                index += width
+                found = True
                 break
+        if not found:
+            index += 1
     return headers
+
+
+def _sections(lines, headers, category):
+    for position, (index, cat) in enumerate(headers):
+        if cat == category:
+            end = headers[position + 1][0] if position + 1 < len(headers) else len(lines)
+            yield lines[index + 1:end]
 
 
 def _section_lines(lines, headers, category):
@@ -106,9 +116,10 @@ def extract_email(text):
 
 
 def extract_phone(text):
+    date_spans = [match.span() for match in DATE_PATTERN.finditer(text)]
     for match in PHONE_PATTERN.finditer(text):
         candidate = match.group(0).strip()
-        if DURATION_LINE_PATTERN.match(candidate):
+        if any(start < match.end() and end > match.start() for start, end in date_spans):
             continue
         return candidate
     return None
@@ -129,26 +140,18 @@ def extract_name(text, email=None):
 
 
 def extract_skills(text, lines, headers):
-    section = _merge_wrapped_list_lines(_section_lines(lines, headers, "skills"))
+    """Prefer skills sections, then supplement with identifiable technologies.
+
+    Only vocabulary terms become output; prose is never a candidate skill.
+    Other extraction fields retain their existing section parsing behavior.
+    """
     skills = []
-    for line in section:
-        _, _, after_colon = line.partition(":")
-        content = after_colon if after_colon else line
-        skills.extend(
-            part.strip() for part in re.split(r"[,•·|/;]", content) if part.strip()
-        )
-
-    if not skills:
-        skills = find_known_skills(text)
-
-    seen = set()
-    unique = []
-    for skill in skills:
-        key = skill.lower()
-        if key not in seen:
-            seen.add(key)
-            unique.append(skill)
-    return unique
+    for position, (index, category) in enumerate(headers):
+        if category == "skills":
+            end = headers[position + 1][0] if position + 1 < len(headers) else len(lines)
+            skills.extend(extract_known_skills("\n".join(lines[index + 1:end]), structured=True))
+    skills.extend(extract_known_skills(text))
+    return list(dict.fromkeys(skills))
 
 
 def extract_education(lines, headers):
@@ -165,116 +168,17 @@ def extract_education(lines, headers):
     return entries
 
 
-def _extract_inline_duration(line):
-    """Pull a '(Month YYYY - Month YYYY)' style date out of a title line."""
-    match = INLINE_DURATION_PATTERN.search(line)
-    if not match:
-        return line, None
-    duration = match.group(0).strip(" ()")
-    title = (line[: match.start()] + line[match.end() :]).strip(" -,")
-    return title, duration
-
-
-def _is_new_entry(section, index):
-    line = section[index]
-    n = len(section)
-    if INLINE_DURATION_PATTERN.search(line):
-        return True
-    if index + 1 < n and DURATION_LINE_PATTERN.match(section[index + 1]):
-        return True
-    if index + 2 < n and DURATION_LINE_PATTERN.match(section[index + 2]):
-        return True
-    return False
-
-
-SENTENCE_END_PATTERN = re.compile(r"[.!?:;]$")
-
-
-def _merge_wrapped_lines(lines):
-    """Rejoin lines that are really the wrapped continuation of the
-    previous PROSE sentence (used for experience bullets) — either because
-    this line starts with a lowercase letter, or because the previous line
-    was left hanging without any sentence-ending punctuation (catches wraps
-    like "...approximately" / "250 students." where the continuation starts
-    with a capital letter or a number and the lowercase check alone would
-    miss it).
-
-    Only safe for prose that's expected to end in terminal punctuation.
-    Comma-separated lists (e.g. skills) never end in periods by nature, so
-    use `_merge_wrapped_list_lines` for those instead — otherwise every
-    list line looks "incomplete" and gets wrongly glued to the next one."""
-WRAP_WIDTH_THRESHOLD = 50
-
-
-def _merge_wrapped_lines(lines):
-    merged = []
-    for line in lines:
-        prev_unterminated = bool(merged) and merged[-1] and not SENTENCE_END_PATTERN.search(merged[-1])
-        # A real wrapped continuation is the leftover tail of a previous
-        # line that got cut off mid-sentence by the page width, so it's
-        # short AND the previous line is itself long (near the wrap
-        # width). A genuine new bullet that simply omits a trailing period
-        # is usually a short, complete, standalone sentence — don't
-        # swallow those into the previous bullet just because neither one
-        # ends in punctuation.
-        looks_like_trailing_fragment = (
-            prev_unterminated
-            and len(line.split()) <= 5
-            and len(merged[-1]) >= WRAP_WIDTH_THRESHOLD
-        )
-        if merged and line and (line[0].islower() or looks_like_trailing_fragment):
-            merged[-1] = f"{merged[-1]} {line}"
-        else:
-            merged.append(line)
-    return merged
-
-
-def _merge_wrapped_list_lines(lines):
-    """Rejoin lines that are the wrapped continuation of a comma/bullet
-    separated list item (used for skills). Only merges when the next line
-    starts with a lowercase letter — list lines legitimately lack terminal
-    punctuation, so the "previous incomplete" heuristic from
-    `_merge_wrapped_lines` would wrongly glue unrelated list lines (e.g. a
-    new "Category:" heading) onto the previous one."""
-    merged = []
-    for line in lines:
-        if merged and line and line[0].islower():
-            merged[-1] = f"{merged[-1]} {line}"
-        else:
-            merged.append(line)
-    return merged
-
-
 def extract_experience(lines, headers):
-    section = _section_lines(lines, headers, "experience")
     entries = []
-    i, n = 0, len(section)
-
-    while i < n:
-        title, duration = _extract_inline_duration(section[i])
-
-        if duration is not None:
-            i += 1
-        elif i + 1 < n and DURATION_LINE_PATTERN.match(section[i + 1]):
-            duration = section[i + 1]
-            i += 2
-        elif i + 2 < n and DURATION_LINE_PATTERN.match(section[i + 2]):
-            title = f"{section[i]}, {section[i + 1]}"
-            duration = section[i + 2]
-            i += 3
-        else:
-            i += 1
-
-        details = []
-        while i < n and not _is_new_entry(section, i):
-            details.append(section[i])
-            i += 1
-
-        entries.append(
-            {"title": title, "duration": duration, "details": _merge_wrapped_lines(details)}
-        )
-
+    for section in _sections(lines, headers, "experience"):
+        for entry in employment(section):
+            if entry not in entries:
+                entries.append(entry)
     return entries
+
+
+def extract_projects(lines, headers):
+    return [entry for section in _sections(lines, headers, "projects") for entry in projects(section)]
 
 
 def extract_candidate_info(text: str) -> dict:
@@ -285,12 +189,15 @@ def extract_candidate_info(text: str) -> dict:
     email = extract_email(text)
     detected_sections = sorted({category for _, category in headers})
 
-    return {
+    candidate = {
         "name": extract_name(text, email),
         "email": email,
         "phone": extract_phone(text),
         "skills": extract_skills(text, lines, headers),
         "education": extract_education(lines, headers),
         "experience": extract_experience(lines, headers),
+        "projects": extract_projects(lines, headers),
         "detected_sections": detected_sections,
     }
+    candidate['skill_evidence'] = collect_skill_evidence(candidate, text, _sections(lines, headers, 'skills'))
+    return candidate
