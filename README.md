@@ -41,6 +41,9 @@ Everything runs on **local rules by default**. AI is opt-in per action. When it 
 | 🤖 **Reliable optional AI** | The AI score stays primary with the local score always beside it. AI-matched skills are labelled *found in resume* or *inferred*, malformed output is retried once, and any fallback shows a banner. |
 | 🔁 **Resume versions** | Re-analyze a revised resume against the same job to compare scores, skills added or removed, and requirement status changes. |
 | 👥 **Recruiter workspace** | Per-job workspaces, batch upload of up to 5 resumes, review statuses with an audit trail, and side-by-side comparison with no automatic ranking. |
+| 🏷️ **Notes and tags** | Private reviewer notes and tags on each candidate, with a tag filter and note search. Never sent to AI; filters never reorder candidates. |
+| 📤 **Comparison export** | Export a comparison to CSV (formula-injection safe) or PDF via print, in the order you chose. Private notes are excluded unless you include them. |
+| 🗂️ **Pipeline board** | A board view with one column per review status. Move candidates by drag and drop or a keyboard-friendly menu; cards stay in upload order. |
 | 🔐 **Privacy controls** | A Privacy & data page shows what is stored and what AI calls send. Data can be deleted in one click and expires automatically when inactive. |
 | 🧪 **One-click demo** | "Try a fictional sample" loads a bundled resume and job description through the real pipeline. |
 
@@ -239,7 +242,7 @@ Check Google's documentation for current model IDs. With a Gemini key, opted-in 
 | `GET /api/history`, `GET /api/versions` | Recent evaluations; version snapshots and comparison |
 | `GET /api/me/data`, `DELETE /api/me/data` | What is stored for the account; erase it |
 | `GET /api/health` | Liveness and storage mode (no user data) |
-| `/api/workspaces/...` | Recruiter workspaces, batch uploads, review statuses, comparison |
+| `/api/workspaces/...` | Recruiter workspaces, batch uploads, review statuses, comparison, notes, tags and CSV export ([Phase 6](docs/phase6-recruiter-workflow.md)) |
 
 Stale `resume_id`, `analysis_id` or workspace versions return **409**.
 
