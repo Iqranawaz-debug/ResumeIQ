@@ -13,7 +13,7 @@ JOB_FIT_WEIGHT = 0.7
 WEAK_FIT_CAP = 49
 
 AI_NOTES = {
-    "not_configured": "AI matching was requested, but no AI provider is configured; local matching was used.",
+    "not_configured": "AI matching was requested, but no AI provider is configured (missing key or invalid AI_BASE_URL); local matching was used.",
     "invalid_response": "The AI provider returned an unusable result (after one retry); local matching was used.",
     "unavailable": "The AI provider was unavailable or timed out; local matching was used.",
 }

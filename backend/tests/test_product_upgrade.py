@@ -93,9 +93,9 @@ class PrivacyControlTests(OfflineAsyncTestCase):
 
     async def test_summary_reports_what_is_stored_without_contents(self):
         summary = await api.get_my_data('one@example.invalid')
-        self.assertEqual(summary | {'ai_provider_configured': None}, {
+        self.assertEqual(summary | {'ai_provider_configured': None, 'ai_provider': None}, {
             'resume_stored': True, 'analysis_stored': True, 'history_entries': 1, 'versions': 0, 'workspaces': 1,
-            'candidates': 1, 'retention_seconds': api.DATA_RETENTION_SECONDS, 'storage': 'memory', 'ai_provider_configured': None})
+            'candidates': 1, 'retention_seconds': api.DATA_RETENTION_SECONDS, 'storage': 'memory', 'ai_provider_configured': None, 'ai_provider': None})
         self.assertNotIn('Jordan', json.dumps(summary))
 
     async def test_delete_erases_only_the_callers_data(self):

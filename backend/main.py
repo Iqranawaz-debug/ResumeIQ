@@ -37,6 +37,7 @@ import samples
 from recruiter import create_router
 from evaluator.versions import compare_versions, record_version, version_snapshot
 from utils import persistence
+from ai import openrouter_client as ai_client
 
 # Comma-separated list, e.g. "https://myapp.vercel.app,http://localhost:5173"
 ALLOWED_ORIGINS = [
@@ -228,7 +229,8 @@ async def get_my_data(username: str = Depends(require_user)):
         **recruiter.user_data_summary(username),
         "retention_seconds": DATA_RETENTION_SECONDS,
         "storage": "database" if store.enabled else "memory",
-        "ai_provider_configured": bool(os.environ.get("OPENROUTER_API_KEY", "").strip()),
+        "ai_provider_configured": ai_client.is_configured(),
+        "ai_provider": ai_client.provider_name() if ai_client.is_configured() else None,
     }
 
 
@@ -248,7 +250,7 @@ async def analyze_resume(
     use_ai: bool = Form(False),
 ):
     # AI job matching is opt-in, as in recruiter workspaces: without it, nothing
-    # is sent to the provider even when OPENROUTER_API_KEY is configured.
+    # is sent to the provider even when an AI key is configured.
     resume = validated_resumes.get(username)
     candidate = resume.get("candidate") if resume else None
     if not candidate:

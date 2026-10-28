@@ -130,3 +130,8 @@ test('privacy panel reflects database storage', () => {
   assert.match(out, /saved in this server&#x27;s database/); assert.match(out, /snapshots.*: 2/)
   assert.ok(!out.includes('no AI provider is configured'))
 })
+
+test('privacy panel names the configured AI provider', () => {
+  const out = html(PrivacyPanel, { token: 't', initialSummary: { resume_stored: false, history_entries: 0, versions: 0, workspaces: 0, candidates: 0, retention_seconds: 3600, storage: 'memory', ai_provider_configured: true, ai_provider: 'Google Gemini' } })
+  assert.match(out, /data is sent to Google Gemini/)
+})
