@@ -1,5 +1,8 @@
 """Bounded single-process, user-owned recruiter resources. No raw file retention."""
+import csv
 import hashlib
+import io
+import re
 import secrets
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -12,6 +15,7 @@ from evaluator.analyzer import analyze_resume_for_job
 from utils.candidate_processing import process_resume
 from utils.upload import read_upload
 from utils import limits
+from utils.skills import display_skill
 from utils.text import clean_note, clean_tag, valid_tag
 
 MAX_FILES = 5
@@ -53,6 +57,10 @@ class Review(StrictModel):
 class Comparison(StrictModel):
     candidate_ids: list[str] = Field(min_length=1, max_length=MAX_COMPARE)
     version: int = Field(ge=1, strict=True)
+
+
+class ComparisonExport(Comparison):
+    include_notes: bool = False  # Private notes are excluded from exports unless explicitly requested.
 
 
 class NoteBody(StrictModel):
@@ -107,6 +115,45 @@ def note_for(record, note_id):
     return note
 
 
+# Spreadsheet apps execute cells starting with these as formulas (CSV injection).
+FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+CSV_COLUMNS = ['Candidate', 'Review status', 'Tags', 'Matched skills', 'Missing skills', 'Years of experience', 'Score']
+
+
+def safe_cell(value):
+    text = '' if value is None else str(value)
+    return "'" + text if text.startswith(FORMULA_PREFIXES) else text
+
+
+def score_label(analysis):
+    """Same wording as the candidate table: '80 / 100 (Local score)' or '(AI score)'."""
+    if not analysis or analysis.get('overall_score') is None:
+        return 'Not scored yet'
+    source = 'AI score' if analysis.get('job_fit_method') == 'ai' else 'Local score'
+    return f"{analysis['overall_score']} / 100 ({source})"
+
+
+def comparison_csv(rows, include_notes):
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
+    writer.writerow(CSV_COLUMNS + (['Notes'] if include_notes else []))
+    for row in rows:
+        analysis = row.get('analysis') or {}
+        cells = [row.get('name') or row.get('filename') or 'Name not found', row.get('status'), '; '.join(row.get('tags') or []),
+                 '; '.join(display_skill(s) for s in analysis.get('matched_skills') or []),
+                 '; '.join(display_skill(s) for s in analysis.get('missing_skills') or []),
+                 analysis.get('total_experience_years'), score_label(analysis)]
+        if include_notes:
+            cells.append(' | '.join(note['text'] for note in row.get('notes') or []))
+        writer.writerow([safe_cell(cell) for cell in cells])
+    return buffer.getvalue()
+
+
+def export_filename(title, extension):
+    slug = re.sub(r'[^a-z0-9]+', '-', title.casefold()).strip('-')[:40] or 'workspace'
+    return f"resumeiq-comparison-{slug}-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.{extension}"
+
+
 def current(group, version):
     if group['version'] != version:
         raise HTTPException(409, 'Job description changed. Refresh and analyze the current version.')
@@ -139,6 +186,9 @@ def summary(record, group):
         'score_source': analysis.get('job_fit_method') if analysis else None,
         'matched_skills': analysis.get('matched_skills', []) if analysis else [],
         'missing_skills': analysis.get('missing_skills', []) if analysis else [],
+        # Display spellings (e.g. 'AWS', 'Go') for exports and print views; the keys above stay for filtering.
+        'matched_skill_names': [display_skill(x) for x in analysis.get('matched_skills', [])] if analysis else [],
+        'missing_skill_names': [display_skill(x) for x in analysis.get('missing_skills', [])] if analysis else [],
         # Private reviewer annotations: owner-only, never part of record['candidate'] (the AI payload source).
         'tags': list(record.get('tags') or []),
         'notes': [dict(note) for note in record.get('notes') or []],
@@ -398,9 +448,8 @@ def create_router(require_user, on_change=None):
         changed(user)
         return {'tags': list(record['tags'])}
 
-    @router.post('/{group_id}/comparison')
-    async def compare(group_id: str, body: Comparison, user: str = Depends(require_user)):
-        group = group_for(user, group_id)
+    def comparison_rows(group, body):
+        # Rows keep the order the user selected; nothing here sorts or filters by score.
         current(group, body.version)
         if len(set(body.candidate_ids)) != len(body.candidate_ids):
             raise HTTPException(422, 'Select distinct candidates.')
@@ -410,7 +459,21 @@ def create_router(require_user, on_change=None):
             if record.get('analysis_version') != group['version'] or not record.get('analysis'):
                 raise HTTPException(409, 'Analyze every selected candidate against the current job description first.')
             rows.append(summary(record, group) | {'candidate': record['candidate'], 'analysis': record['analysis']})
+        return rows
+
+    @router.post('/{group_id}/comparison')
+    async def compare(group_id: str, body: Comparison, user: str = Depends(require_user)):
+        group = group_for(user, group_id)
+        rows = comparison_rows(group, body)
         return {'version': group['version'], 'candidates': rows,
                 'notice': 'Human review only. No automatic ranking or decisions. AI and local scores are not equally calibrated; provider judgments are not locally verified.'}
+
+    @router.post('/{group_id}/comparison/csv')
+    async def export_comparison_csv(group_id: str, body: ComparisonExport, user: str = Depends(require_user)):
+        """CSV of the comparison as JSON {filename, content}; the browser saves it as a file."""
+        group = group_for(user, group_id)
+        rows = comparison_rows(group, body)
+        return {'filename': export_filename(group['title'], 'csv'), 'content': comparison_csv(rows, body.include_notes),
+                'include_notes': body.include_notes}
 
     return router

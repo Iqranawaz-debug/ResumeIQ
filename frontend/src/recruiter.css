@@ -342,6 +342,35 @@
 .rw-note-text { white-space: pre-wrap; color: var(--text-strong); font-size: var(--text-sm); }
 .rw-delete-link { color: var(--danger); }
 .rw-annotations .rw-actions { margin-top: var(--space-2); }
+/* Export toolbar above the comparison */
+.rw-export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: none;
+}
+.rw-export-copy { flex: 1 1 260px; }
+.rw-export-copy h3 { font-size: var(--text-md); }
+.rw-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--text-strong); cursor: pointer; }
+.rw-check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.rw-export-error { flex-basis: 100%; margin: 0; }
+
+/* Comparison PDF: printed alone, using the shared .print-report styles from App.css. */
+@media print {
+  /* #root keeps min-height: 100vh, which would otherwise print a blank first page. */
+  body[data-print='comparison'] #root { display: none !important; }
+  /* Explanation rows: give the "56 / 100 × 60% = 33.60 points" text room on paper. */
+  .print-report .breakdown-row { grid-template-columns: 110px minmax(0, 1fr) 230px; }
+  .comparison-print-candidate { break-inside: auto; margin-top: 24px; }
+  .comparison-print-candidate + .comparison-print-candidate { break-before: page; }
+  .comparison-print-facts { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 12px; }
+  .comparison-print-facts th { text-align: left; width: 30%; padding: 4px 8px; color: #374151; border-bottom: 1px solid #e5e7eb; }
+  .comparison-print-facts td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; color: #111827; }
+  .comparison-print-note { white-space: pre-wrap; }
+}
+
 /* Outrank the generic .candidate-card list indentation from App.css. */
 .recruiter-comparison ul.rw-tag-chips,
 .recruiter-comparison ol.rw-notes { padding-left: 0; }

@@ -63,3 +63,10 @@ export function withoutNote(row, noteId) {
 export function withTags(row, tags) {
   return { ...row, tags: [...tags] }
 }
+
+// Export wording shared with the CSV (backend/recruiter.py score_label) so both read the same.
+export function scoreLabel(analysis) {
+  if (!analysis || analysis.overall_score == null) return 'Not scored yet'
+  return `${analysis.overall_score} / 100 (${analysis.job_fit_method === 'ai' ? 'AI score' : 'Local score'})`
+}
+export const EXPORT_FOOTER = 'Decision support only. Human review required.'

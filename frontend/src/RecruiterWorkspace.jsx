@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { API_BASE_URL, addCandidateNote, addCandidateTag, apiRequest, deleteCandidateNote, editCandidateNote, removeCandidateTag } from './api'
+import { createPortal } from 'react-dom'
+import { API_BASE_URL, addCandidateNote, addCandidateTag, apiRequest, deleteCandidateNote, editCandidateNote, exportComparisonCsv, removeCandidateTag } from './api'
 import { ANNOTATION_LIMITS, EMPTY_FILTERS, REVIEW_STATUSES, allTags, filterCandidates, updateCandidate, validateBatch, withNote, withTags, withoutNote } from './recruiterState'
 import RecruiterComparison from './RecruiterComparison'
 import CandidateAnnotations from './CandidateAnnotations'
+import ComparisonReport from './ComparisonReport'
 
 const STEPS = [
   { title: 'Create a job workspace', text: 'Add the job title and the job description every candidate will be compared against.' },
@@ -12,6 +14,18 @@ const STEPS = [
 const ANALYSIS_TONE = { completed: 'success', outdated: 'warning', pending: 'neutral' }
 const REVIEW_TONE = { Shortlisted: 'success', 'Under Review': 'warning', 'Not Selected': 'danger', 'Not Reviewed': 'neutral' }
 const OUTCOME_TONE = { success: 'success', duplicate: 'neutral' }
+
+function saveFile(filename, content, type) {
+  // A UTF-8 byte-order mark makes spreadsheet apps read accented names correctly.
+  const url = URL.createObjectURL(new Blob(['\ufeff', content], { type }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
 
 function formatBytes(bytes) {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -34,6 +48,10 @@ export default function RecruiterWorkspace({ token }) {
   const [progress, setProgress] = useState(null)
   const [loaded, setLoaded] = useState(false)
   const [moreFilters, setMoreFilters] = useState(false)
+  const [includeNotes, setIncludeNotes] = useState(false)
+  const [exporting, setExporting] = useState(null)
+  const [exportError, setExportError] = useState('')
+  const [printData, setPrintData] = useState(null)
   const alive = useRef(true)
   const controllers = useRef(new Set())
   const stop = useRef(false)
@@ -66,6 +84,40 @@ export default function RecruiterWorkspace({ token }) {
       .finally(() => { pending.delete(controller); if (!controller.signal.aborted) setLoaded(true) })
     return () => { alive.current = false; stop.current = true; for (const controller of pending) controller.abort() }
   }, [token])
+
+  // The comparison report prints alone: the app shell is hidden while body[data-print=comparison] is set.
+  useEffect(() => {
+    if (!printData) return undefined
+    document.body.dataset.print = 'comparison'
+    const finish = () => setPrintData(null)
+    window.addEventListener('afterprint', finish, { once: true })
+    const timer = setTimeout(() => window.print(), 50)
+    return () => { clearTimeout(timer); window.removeEventListener('afterprint', finish); delete document.body.dataset.print }
+  }, [printData])
+
+  async function exportComparison(kind) {
+    if (operation.current) return
+    operation.current = true; setExporting(kind); setExportError(''); setMessage('')
+    const candidateIds = rows.map((row) => row.id)
+    try {
+      if (kind === 'csv') {
+        const result = await tracked((o) => exportComparisonCsv(token, group.id, { candidateIds, version: group.version, includeNotes }, o))
+        if (!alive.current) return
+        saveFile(result.filename, result.content, 'text/csv;charset=utf-8')
+        setMessage(`Exported ${candidateIds.length} candidate${candidateIds.length === 1 ? '' : 's'} to ${result.filename} ${result.include_notes ? 'including' : 'without'} private notes.`)
+      } else {
+        const result = await request(`/${group.id}/comparison`, json('POST', { candidate_ids: candidateIds, version: group.version }))
+        if (!alive.current) return
+        setPrintData({ rows: result.candidates, notice: result.notice, includeNotes, title: group.title, version: group.version, generatedAt: new Date().toISOString() })
+        setMessage('Print dialog opened. Choose "Save as PDF" as the destination.')
+      }
+    } catch (err) {
+      if (alive.current && err.name !== 'AbortError') setExportError(err.message)
+    } finally {
+      operation.current = false
+      if (alive.current) setExporting(null)
+    }
+  }
 
   async function run(action) {
     if (operation.current) return
@@ -317,6 +369,19 @@ export default function RecruiterWorkspace({ token }) {
 
       {candidates.length ? <>{candidatesSection}{uploadSection}</> : <>{uploadSection}{candidatesSection}</>}
 
+      {rows.length > 0 && <div className="rw-card rw-export-bar" role="group" aria-label="Export comparison">
+        <div className="rw-export-copy">
+          <h3>Export {rows.length === 1 ? 'this candidate' : `these ${rows.length} candidates`}</h3>
+          <p className="rw-hint">Exports keep the order shown below. Decision support only; human review required.</p>
+        </div>
+        <label className="rw-check"><input type="checkbox" checked={includeNotes} disabled={Boolean(exporting)} onChange={(e) => setIncludeNotes(e.target.checked)} /> Include private notes</label>
+        <div className="rw-actions rw-inline">
+          <button type="button" className="rw-button" disabled={busy || Boolean(exporting)} aria-busy={exporting === 'csv'} onClick={() => exportComparison('csv')}>{exporting === 'csv' ? 'Exporting CSV…' : 'Export CSV'}</button>
+          <button type="button" className="rw-button" disabled={busy || Boolean(exporting)} aria-busy={exporting === 'pdf'} onClick={() => exportComparison('pdf')}>{exporting === 'pdf' ? 'Preparing PDF…' : 'Export PDF'}</button>
+        </div>
+        {exportError && <p className="status error rw-export-error" role="alert">{exportError}</p>}
+      </div>}
+      {printData && createPortal(<ComparisonReport {...printData} />, document.body)}
       {rows.length > 0 && <RecruiterComparison rows={rows} busy={busy} onReview={review}
         renderAnnotations={(row) => <CandidateAnnotations key={row.id} row={row} busy={busy} limits={annotationLimits} {...annotationHandlers} />} />}
 

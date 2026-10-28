@@ -68,6 +68,12 @@ export function removeCandidateTag(token, groupId, candidateId, tag, options) {
   return apiRequest(workspaceUrl(groupId, 'candidates', candidateId, 'tags', tag), jsonRequest(token, 'DELETE', undefined, options))
 }
 
+// Returns {filename, content, include_notes}; the caller saves content as a .csv file.
+export function exportComparisonCsv(token, groupId, { candidateIds, version, includeNotes = false }, options) {
+  return apiRequest(workspaceUrl(groupId, 'comparison', 'csv'),
+    jsonRequest(token, 'POST', { candidate_ids: candidateIds, version, include_notes: Boolean(includeNotes) }, options))
+}
+
 export function analysisForm(mode, text, file, resumeId, useAI = false) {
   const data = new FormData()
   data.append('resume_id', resumeId || '')
