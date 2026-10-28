@@ -15,17 +15,39 @@
   --accent-soft: rgba(37, 99, 235, 0.1);
   --accent-border: rgba(37, 99, 235, 0.35);
 
-  /* Secondary brand accent (teal) — variable names kept as "lime" from the
-     original dark theme to avoid a large unrelated rename across App.css. */
-  --lime: #0d9488;
-  --lime-soft: rgba(13, 148, 136, 0.12);
-  --lime-text: #ffffff;
-  --lime-strong: #0f766e;
+  /* Secondary brand accent (teal). */
+  --accent-2: #0d9488;
+  --accent-2-soft: rgba(13, 148, 136, 0.12);
+  --accent-2-text: #ffffff;
+  --accent-2-strong: #0f766e;
 
   --danger: #dc2626;
   --danger-soft: rgba(220, 38, 38, 0.1);
 
   --shadow: rgba(15, 23, 42, 0.08) 0 10px 30px -8px;
+
+  /* Status colors for evidence and findings. */
+  --success: #15803d;
+  --success-soft: rgba(21, 128, 61, 0.1);
+  --warning: #b45309;
+  --warning-soft: rgba(180, 83, 9, 0.1);
+  --neutral-soft: rgba(71, 85, 105, 0.1);
+
+  /* Spacing, radius and type scales. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 24px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
@@ -53,19 +75,25 @@
   --text-strong: #f5f4fb;
   --text-dim: #726f85;
 
-  --accent: #8b5cf6;
-  --accent-soft: rgba(139, 92, 246, 0.15);
-  --accent-border: rgba(139, 92, 246, 0.4);
+  --accent: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.15);
+  --accent-border: rgba(96, 165, 250, 0.4);
 
-  --lime: #d4ff4f;
-  --lime-soft: rgba(212, 255, 79, 0.15);
-  --lime-text: #0f1400;
-  --lime-strong: var(--lime);
+  --accent-2: #2dd4bf;
+  --accent-2-soft: rgba(45, 212, 191, 0.15);
+  --accent-2-text: #042f2a;
+  --accent-2-strong: var(--accent-2);
 
   --danger: #ff6b81;
   --danger-soft: rgba(255, 107, 129, 0.15);
 
   --shadow: rgba(0, 0, 0, 0.5) 0 20px 40px -12px;
+
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.14);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --neutral-soft: rgba(185, 182, 201, 0.12);
 
   color-scheme: dark;
 }
@@ -85,8 +113,8 @@ body {
 
 :root[data-theme='dark'] body {
   background:
-    radial-gradient(ellipse 900px 600px at 15% -10%, rgba(139, 92, 246, 0.22), transparent),
-    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(212, 255, 79, 0.08), transparent),
+    radial-gradient(ellipse 900px 600px at 15% -10%, rgba(96, 165, 250, 0.16), transparent),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(45, 212, 191, 0.07), transparent),
     var(--bg);
 }
 

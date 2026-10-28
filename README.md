@@ -1,20 +1,21 @@
 <div align="center">
 
 # 📄 ResumeIQ
-### Smarter Resume Evaluation, Clearer Career Insights
+### Explainable Resume Evaluation, Evidence-Based Feedback
 
-**Upload a resume. Understand its strengths. Compare it with a job description.**
+**Upload a resume. See exactly how it matches a job. Improve it honestly.**
 
-A full-stack resume evaluation application built with **React + FastAPI**, combining structured resume analysis, practical recommendations, and optional AI-assisted job-description matching.
+A full-stack resume evaluation application built with **React + FastAPI**: requirement-by-requirement matching with quoted evidence, a transparent score breakdown, grounded improvement suggestions, and optional AI that never hides the local result.
 
 ![React](https://img.shields.io/badge/React-Frontend-61DAFB?style=for-the-badge&logo=react&logoColor=black)
 ![Vite](https://img.shields.io/badge/Vite-Build_Tool-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-Resume_Analysis-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Supabase](https://img.shields.io/badge/Supabase-Authentication-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-Optional_Persistence-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![OpenRouter](https://img.shields.io/badge/OpenRouter-Optional_AI-7C3AED?style=for-the-badge)
 
-**Resume parsing** · **Rule-based evaluation** · **Job-description matching** · **Secure login** · **Optional AI insights**
+**Requirement matching** · **Explainable scoring** · **Grounded AI rewrites** · **Readability checks** · **Privacy controls**
 
 </div>
 
@@ -22,211 +23,223 @@ A full-stack resume evaluation application built with **React + FastAPI**, combi
 
 ## ✨ Why ResumeIQ?
 
-A resume can contain great experience and still be difficult to evaluate against a specific role. **ResumeIQ** brings resume analysis and job-description comparison into one straightforward workflow, helping users understand their resume and identify potential improvements.
+Most resume checkers hand back a single number. ResumeIQ shows its work: which job requirements the resume evidences, which it doesn't, the exact formula behind the score, and which honest changes would move it.
 
-Rather than depending entirely on an external AI service, the application uses **rule-based processing by default**. AI-assisted job-description matching is optional, and the app falls back to rule-based matching if that service is unavailable.
+Everything runs on **local rules by default**. AI is opt-in per action. When it is used, its output is validated, labelled as inference where it can't be verified, and shown beside the local result rather than replacing it.
+
+> Scores are indicative heuristics, not official ATS scores or hiring probabilities.
 
 ## 🚀 What it offers
 
 | Feature | How it works |
 |---|---|
-| 📤 **Resume upload** | Upload a resume using the React interface; backend parsing supports PDF and DOCX. |
-| 🔎 **Information extraction** | Rule-based extraction processes resume information. |
-| 📊 **Resume evaluation** | Evaluation modules calculate scores and recommendations. |
-| 🎯 **Job-description matching** | Compare resume content against a job description. |
-| 🤖 **Optional AI matching** | OpenRouter can enhance semantic job-description matching when configured. |
-| 🛟 **Reliable fallback** | If the AI key is missing or the call fails, the application uses its rule-based matcher. |
-| 🔐 **Authentication** | Supabase handles signup and login; FastAPI verifies Supabase-issued access tokens. |
+| 🎯 **Requirement review** | Each job-description requirement is marked *Matched*, *Partial*, *Not evidenced* or *Can't assess*, with a reason, an evidence-or-inference label and a quote from the resume. Display-only: it never changes the score. |
+| 📊 **Explainable scoring** | Shows the exact formula, component points and weights. Preferred-only skills count half, and a weak-fit cap stops a polished resume from rescuing the wrong role. |
+| 📈 **What would change this score** | Re-runs the same scoring rules on hypothetical edits (for example, "Show your Kubernetes experience: +12 job fit"). Every suggestion is conditional on being true. |
+| ✍️ **Improvement assistant** | Flags weak openings, passive voice, missing outcomes and long bullets. Optional AI rewrites are kept only if a grounding validator confirms they add no new numbers, tools, names or seniority. |
+| 🔎 **Document readability** | Detects image-only pages, contact details hidden in DOCX headers, text boxes, tables, icon fonts and unreadable dates, each with a fix. These are described as possible risks, not ATS guarantees. |
+| 🤖 **Reliable optional AI** | The AI score stays primary with the local score always beside it. AI-matched skills are labelled *found in resume* or *inferred*, malformed output is retried once, and any fallback shows a banner. |
+| 🔁 **Resume versions** | Re-analyze a revised resume against the same job to compare scores, skills added or removed, and requirement status changes. |
+| 👥 **Recruiter workspace** | Per-job workspaces, batch upload of up to 5 resumes, review statuses with an audit trail, and side-by-side comparison with no automatic ranking. |
+| 🔐 **Privacy controls** | A Privacy & data page shows what is stored and what AI calls send. Data can be deleted in one click and expires automatically when inactive. |
+| 🧪 **One-click demo** | "Try a fictional sample" loads a bundled resume and job description through the real pipeline. |
 
-> **Scope note:** Resume upload and extraction are rule-based. The optional LLM is used for the **Add Job Description** matching step, not for resume extraction. Resume and evaluation data are held **in memory** by the backend; there is no application database for that data.
+Also included: light and dark themes, keyboard-accessible tabs, a responsive layout, a TXT summary and a print/PDF report.
 
 ## 🖼️ Project showcase
 
-Add real screenshots of your running app to a `docs/screenshots/` directory and update the paths below.
+Add screenshots of the running app to `docs/screenshots/` and update the table below. The bundled fictional sample is ideal for this because it contains no real personal data.
 
-| Resume upload | Evaluation results |
-|---|---|
-| Add a screenshot of the upload interface | Add a screenshot of the results interface |
-
-**Suggested screenshots:** upload screen, evaluation overview, job-description matching, and login/signup. Avoid showing real resume personal data or API credentials.
+| Upload & sample | Requirement review | Score breakdown | Improvement assistant |
+|---|---|---|---|
+| _screenshot_ | _screenshot_ | _screenshot_ | _screenshot_ |
 
 ## 🏗️ How it works
 
 ```mermaid
 flowchart TD
-    A[React + Vite frontend] --> B[Supabase signup / login]
-    B --> C[Supabase access token]
-    A --> D[FastAPI backend]
-    C --> E[Backend token verification]
-    E --> D
-    D --> F[PDF / DOCX parsing]
-    F --> G[Rule-based extraction]
-    G --> H[Resume evaluation and recommendations]
-    D --> I{Job description provided?}
-    I -->|Yes| J{OpenRouter configured and available?}
-    J -->|Yes| K[Optional LLM matching]
-    J -->|No or error| L[Rule-based JD matching]
-    K --> M[Analysis response]
-    L --> M
-    H --> M
-    M --> A
+    A[React + Vite frontend] -->|Bearer token| B[FastAPI backend]
+    B --> C[Local accounts<br/>PBKDF2 hashes]
+    B --> D[PDF / DOCX parsing<br/>+ layout stats]
+    D --> E[Rule-based extraction<br/>skills, experience, education,<br/>projects, certifications]
+    E --> F[Readability checks]
+    B --> G{Job description?}
+    G -->|No| H[Resume quality score]
+    G -->|Yes| I[Local matching<br/>always computed]
+    I --> J{User ticked AI<br/>and key configured?}
+    J -->|Yes| K[AI matching<br/>validated, 1 retry]
+    J -->|No or failure| L[Local result is main score]
+    K --> M[AI score main,<br/>local score beside it]
+    H --> N[Explanation, requirement review,<br/>score impacts, versions]
+    L --> N
+    M --> N
+    N --> A
+    B -.->|optional| O[(SQLite<br/>RESUMEIQ_DB_PATH)]
 ```
 
-The frontend communicates with the backend over HTTP. Authentication is managed by Supabase; the backend **verifies tokens**, rather than storing or managing user passwords itself.
+Business logic lives in the backend. The frontend renders backend results without recomputing scores.
 
 ## 🧰 Tech stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React, Vite, JavaScript |
-| Backend | Python, FastAPI |
-| Resume formats | PDF, DOCX |
-| Extraction and default matching | Rule-based Python modules |
-| Optional AI matching | OpenRouter API |
-| Authentication | Supabase Auth |
-| Data storage | Resume/evaluation data in backend memory (no app database) |
+| Frontend | React 19, Vite 8, plain CSS with design tokens, Oxlint |
+| Backend | Python, FastAPI, Uvicorn, pypdf, python-docx |
+| Matching & scoring | Rule-based Python modules (default) |
+| Optional AI | OpenRouter via the OpenAI SDK |
+| Authentication | Local accounts (salted PBKDF2) with bearer sessions |
+| Storage | In memory by default; optional SQLite persistence |
+| Delivery | Docker Compose (nginx + Uvicorn), GitHub Actions CI |
+| Tests | Python `unittest`, Node `node:test` |
 
 ## 📁 Repository structure
 
 ```text
-ResumeEvaluator/
+ResumeIQ/
 ├── backend/
-│   ├── main.py              # FastAPI application
-│   ├── parser/              # PDF/DOCX resume parsing
-│   ├── extractor/           # Rule-based information extraction
-│   ├── evaluator/           # Scoring and recommendations
-│   ├── matcher/             # Rule-based job-description matching
-│   ├── ai/                  # Optional OpenRouter matching
-│   ├── auth/                # Supabase access-token verification
-│   └── utils/               # Validators and constants
-├── frontend/                # React + Vite application
-├── assets/                  # Static assets
-├── sample_resumes/          # Sample resume files
-└── tests/                   # Test files
+│   ├── main.py              # API routes, retention, persistence wiring
+│   ├── recruiter.py         # Recruiter workspaces router
+│   ├── samples.py           # Bundled fictional demo resume and job description
+│   ├── auth/                # Local accounts and sessions
+│   ├── parser/              # PDF/DOCX/text parsing with layout stats
+│   ├── extractor/           # Rule-based extraction and evidence quotes
+│   ├── matcher/             # Job matching and requirement-line review
+│   ├── evaluator/           # Scoring, explanation, impacts, checks, improvements, versions
+│   ├── ai/                  # OpenRouter matching, grounded rewrites, privacy filtering
+│   ├── utils/               # Limits, uploads, skills vocabulary, SQLite persistence
+│   ├── tests/               # Synthetic unittest suites (no network, no real data)
+│   └── Dockerfile
+├── frontend/
+│   ├── src/                 # App shell, results dashboard, recruiter workspace, styles
+│   ├── tests/               # Component/state tests and a Playwright QA script
+│   ├── Dockerfile
+│   └── nginx.conf
+├── docs/                    # Phase reports and verification notes
+├── docker-compose.yml
+├── .env.example
+└── .github/workflows/ci.yml
 ```
 
 ## ⚡ Getting started
 
-### 1. Configure Supabase (required)
+No API key is needed. AI features stay off until a key is configured and you opt in.
 
-Supabase provides user **signup and login**. The FastAPI backend verifies the issued access token.
-
-1. Create a project at [Supabase Dashboard](https://supabase.com/dashboard).
-2. Open **Authentication → Providers** and enable **Email**.
-3. For easier local testing only, you may disable **Confirm email**; use an appropriate verification policy for real deployments.
-4. Under **Project Settings → API**, find the project URL and **anon public** key.
-
-Create `frontend/.env`:
-
-```dotenv
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-For the backend, set the corresponding values in PowerShell:
+### Option A: Docker
 
 ```powershell
-$env:SUPABASE_URL = "https://your-project.supabase.co"
-$env:SUPABASE_ANON_KEY = "your_supabase_anon_key"
+copy .env.example .env
+docker compose up --build
 ```
 
-> Never commit real environment files or private API credentials. The Supabase **anon** key is intended for client applications; do not replace it with a secret service-role key in the frontend.
+Open **http://localhost:8080**. The API runs at http://localhost:8000, with a health check at `/api/health`. Compose turns on SQLite persistence in a named volume.
 
-### 2. Start the FastAPI backend
+### Option B: Local development
 
-In **PowerShell**:
+Verified on Windows with Python **3.14.3**, Node **24.21.0** and npm **11.19.0**.
+
+**Backend** (from the repository root):
 
 ```powershell
+python -m venv backend/.venv
+backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt -c backend/constraints-baseline.txt
 cd backend
-pip install -r requirements.txt
-$env:SUPABASE_URL = "https://your-project.supabase.co"
-$env:SUPABASE_ANON_KEY = "your_supabase_anon_key"
-python -m uvicorn main:app --reload --port 8001
+.venv/Scripts/python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-**Backend:** `http://localhost:8001`  
-**FastAPI documentation (when enabled):** `http://localhost:8001/docs`
-
-### 3. Start the React frontend
-
-Open a **second terminal**:
+**Frontend** (second terminal):
 
 ```powershell
 cd frontend
-npm install
-npm run dev
+npm ci
+npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-**Frontend:** `http://localhost:5173`  
-The frontend talks to the backend at `http://localhost:8001`.
+Open **http://localhost:5173**, create a local account, then choose **Try a fictional sample** to see every feature. API docs are at http://localhost:8000/docs.
 
-## 🤖 Optional: AI-powered job-description matching
+## ⚙️ Configuration
 
-By default, **job-description matching is rule-based**. To enable the optional OpenRouter path, configure an API key before starting the backend:
+Every value is optional. See [`.env.example`](.env.example).
+
+| Variable | Default / purpose |
+|---|---|
+| `OPENROUTER_API_KEY` | Enables opt-in AI job matching and AI wording suggestions. Backend only; never put secrets in `VITE_*` values. |
+| `OPENROUTER_MODEL` | `openai/gpt-oss-20b:free` |
+| `ALLOWED_ORIGINS` | `http://localhost:5173`; comma-separated, exact scheme, host and port |
+| `RESUMEIQ_DB_PATH` | Empty keeps working data in memory only. A file path persists it in SQLite. |
+| `DATA_RETENTION_SECONDS` | `7200`; inactive users' working data is erased after this period |
+| `SESSION_TTL_SECONDS` | `3600` |
+| `VITE_API_BASE_URL` | Frontend build setting; `http://localhost:8000` |
+| `MAX_RESUME_BYTES`, `MAX_JD_BYTES`, `MAX_TEXT_CHARS`, `MAX_PDF_PAGES`, … | Resource limits (see `backend/utils/limits.py`) |
+
+The backend doesn't load `.env` by itself. Docker Compose passes it in; locally, use Uvicorn's `--env-file`.
+
+## 🔒 Privacy and data handling
+
+- **Files are never kept.** Uploads are parsed and discarded. Extracted fields, analyses, history, version snapshots (scores, skills and requirement statuses only) and workspaces are held in memory, or in SQLite when `RESUMEIQ_DB_PATH` is set.
+- **Working data expires.** It is erased after `DATA_RETENTION_SECONDS` of inactivity, on request (`DELETE /api/me/data` or the Privacy page), and on restart when persistence is off.
+- **Accounts are local.** They live in `backend/data/users.json` with salted PBKDF2 hashes. Writes are atomic, and a corrupt file stops startup rather than wiping accounts. Sessions are in memory, so a restart means signing in again.
+- **AI is opt-in.**
+  - Job matching sends skills, education, and employment titles, dates and descriptions (with best-effort contact redaction), plus the job description.
+  - Wording suggestions send only flagged employment bullets with no names, organizations, contact details or sensitive attributes.
+  - Projects, evidence quotations and files are never sent.
+  - Redaction is best effort, not anonymization.
+- **Not a hiring decision.** Scores are decision support only. Comparisons never rank candidates automatically.
+
+## 🔌 API
+
+| Method/path | Behavior |
+|---|---|
+| `POST /api/signup`, `/api/login`, `/api/logout` | Local accounts; bearer tokens |
+| `POST /api/upload` | Multipart `file` (PDF/DOCX): extraction, categorization, readability checks |
+| `POST /api/upload/sample` | Loads the bundled fictional resume and returns a sample job description |
+| `POST /api/analyze` | `resume_id`, optional `job_description` text or `file`, optional `use_ai`. Returns the analysis, history, versions and a version comparison. |
+| `POST /api/improvements` | `resume_id`, `analysis_id`, optional `use_ai` for grounded AI wording suggestions. Cached; never rescores. |
+| `GET /api/history`, `GET /api/versions` | Recent evaluations; version snapshots and comparison |
+| `GET /api/me/data`, `DELETE /api/me/data` | What is stored for the account; erase it |
+| `GET /api/health` | Liveness and storage mode (no user data) |
+| `/api/workspaces/...` | Recruiter workspaces, batch uploads, review statuses, comparison |
+
+Stale `resume_id`, `analysis_id` or workspace versions return **409**.
+
+## 🧪 Testing
 
 ```powershell
-$env:OPENROUTER_API_KEY = "your_openrouter_api_key"
-python -m uvicorn main:app --reload --port 8001
+cd backend
+.venv/Scripts/python.exe -m unittest discover -s tests
+.venv/Scripts/python.exe -m pip check
 ```
-
-Get a key at [OpenRouter](https://openrouter.ai/settings/keys).
-
-The model is configured in `backend/ai/openrouter_client.py` and defaults to:
-
-```text
-openai/gpt-oss-20b:free
-```
-
-You can change it without editing the application code:
 
 ```powershell
-$env:OPENROUTER_MODEL = "your_preferred_model_slug"
-python -m uvicorn main:app --reload --port 8001
+cd frontend
+node --test tests/*.test.js
+npm run lint
+npm run build
 ```
 
-**How the fallback works:**
+**270 backend tests** and **47 frontend tests** pass, and lint, build and `pip check` are clean. Tests use synthetic data, mock every AI call and block network access. GitHub Actions runs both suites on pushes and pull requests. `frontend/tests/browser-qa.mjs` is a Playwright scenario script that needs Playwright installed separately.
 
-```mermaid
-flowchart LR
-    A[Add Job Description] --> B{OpenRouter key and call work?}
-    B -->|Yes| C[LLM-assisted matching]
-    B -->|No| D[Rule-based matching]
-    C --> E[Results]
-    D --> E
-```
+## ⚠️ Known limitations
 
-Check `job_fit_method` and, where present, `job_fit_model` in the `/api/analyze` response to see which matching path actually ran.
-
-> OpenRouter model availability and pricing can change. A `:free` model slug identifies a free-tier route, but service limits and access conditions may apply. The app remains usable with rule-based matching if OpenRouter is unavailable.
-
-## 🔒 Privacy and design notes
-
-- **Supabase handles authentication**; your FastAPI backend verifies access tokens.
-- **Resume extraction is rule-based**, regardless of whether optional AI matching is enabled.
-- **No application database** stores resumes or evaluation results; those are kept in backend memory.
-- **OpenRouter is optional**; using its matching feature sends relevant job-description/resume context to an external provider. Review data-handling considerations before using real sensitive documents.
-- The application is **not a guarantee of hiring outcomes**; its scores and recommendations are decision-support feedback.
-
-## 🧪 Testing and development
-
-The repository includes a `tests/` directory. Follow the test setup and dependencies included in your project when running them; this README does not claim a specific passing test count.
-
-For local development, keep the backend and frontend running in separate terminals. Use the browser developer tools and the FastAPI response (`job_fit_method`) to investigate whether the rule-based or optional AI route was used.
+- Extraction is rule-based with a bounded skill vocabulary. Complex layouts, unusual headings and scanned PDFs (no OCR) can lose information.
+- Requirement statuses based on related skills or similar wording are inferences. Certification validity and degree field or completion are not verified.
+- The rewrite validator is deliberately strict and may reject useful AI output. It still allows plain verb changes, so every draft needs human review.
+- Sessions live in process memory and the API runs a single worker. A restart signs users out; persisted working data remains when SQLite is enabled.
+- The Docker images and CI workflow were written for this release but not yet built or run in the verification environment.
+- Exports are reports, not rewritten resume files. Print-to-PDF uses the browser dialog.
 
 ## 🗺️ Future improvements
 
-Potential directions for future development:
-
-- Better PDF/DOCX layout handling and extraction quality.
-- More transparent breakdowns of evaluation scores and recommendations.
-- Additional test coverage for authentication and complex resume formats.
-- Privacy-conscious storage options for users who explicitly want saved history.
-- Expanded job-description matching evaluation across different industries.
-- Deployment documentation and monitoring for hosted environments.
+- OCR for scanned resumes, behind an explicit opt-in.
+- Persistent sessions and a multi-worker deployment.
+- A data-driven skill vocabulary for more industries.
+- Configurable scoring presets for recruiter workspaces.
+- Screenshots and a hosted demo.
 
 ## 💡 What I learned
 
-Building ResumeIQ brings together **frontend development, backend APIs, authentication, document processing, and practical matching logic** in one full-stack workflow. The key design goal is to provide useful feedback **without making the whole application depend on an external AI API**.
+ResumeIQ brings together **frontend design, API design, document parsing, explainable scoring, privacy engineering and responsible AI integration**. The central design goal is to give useful, honest feedback that shows its evidence, without letting an external AI service silently decide the result.
+
+Historical phase reports live in [`docs/`](docs/).
 
 ---
 
@@ -234,6 +247,6 @@ Building ResumeIQ brings together **frontend development, backend APIs, authenti
 
 ### Built with curiosity, code, and continuous learning ✨
 
-**ResumeIQ — Understand your resume. Improve your next application.**
+**ResumeIQ: understand your resume, improve it honestly.**
 
 </div>

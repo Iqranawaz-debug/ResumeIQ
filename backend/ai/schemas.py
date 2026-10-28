@@ -1,6 +1,7 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
+from matcher.matcher import determine_match_label
 
 
 class AIExperienceEntry(BaseModel):
@@ -36,16 +37,27 @@ class AISkillCategorization(BaseModel):
 
 class AIMatchResult(BaseModel):
     requirements: AIRequirements
-    overall_score: int
+    overall_score: int = Field(ge=0, le=100, strict=True)
     match_label: Literal["Strong Match", "Partial Match", "Weak Match"]
-    skills_score: int
+    skills_score: int = Field(ge=0, le=100, strict=True)
     matched_skills: list[str] = []
     missing_skills: list[str] = []
-    experience_score: int
+    experience_score: int = Field(ge=0, le=100, strict=True)
     experience_note: str
-    education_score: int
+    education_score: int = Field(ge=0, le=100, strict=True)
     education_note: str
     strengths: list[str] = []
     suggestions: list[str] = []
     weaknesses: list[str] = []
     interview_questions: list[str] = []
+
+    @model_validator(mode="after")
+    def consistent_match(self):
+        if self.match_label != determine_match_label(self.overall_score):
+            raise ValueError("Match label contradicts score")
+        matched = {s.casefold() for s in self.matched_skills}
+        missing = {s.casefold() for s in self.missing_skills}
+        required = {s.casefold() for s in self.requirements.required_skills}
+        if matched & missing or not (matched | missing).issubset(required):
+            raise ValueError("Inconsistent skill evidence")
+        return self

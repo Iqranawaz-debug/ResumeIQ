@@ -15,9 +15,13 @@ def get_client() -> OpenAI:
     A capped timeout keeps a congested free-tier queue from stalling the
     upload/analyze request for a long time — a slow call fails fast and
     falls back to the rule-based path instead."""
-    api_key = os.environ["OPENROUTER_API_KEY"]
+    api_key = os.environ["OPENROUTER_API_KEY"].strip()
+    if not api_key:
+        # An empty value is "not configured", not a provider outage.
+        raise KeyError("OPENROUTER_API_KEY")
     return OpenAI(
         base_url=OPENROUTER_BASE_URL,
         api_key=api_key,
         timeout=REQUEST_TIMEOUT_SECONDS,
+        max_retries=0,
     )

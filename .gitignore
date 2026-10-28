@@ -17,8 +17,33 @@ frontend/.vite/
 .env
 *.env
 .env.local
+.env.*
+*.env.*
+
+# Private uploaded documents and generated test/report artifacts
+uploads/
+resumes/
+sample_resumes/
+*.pdf
+*.docx
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+test-results/
+playwright-report/
 
 # Editor / OS
 .vscode/
 .DS_Store
 Thumbs.db
+reviewer/
+reviewer/
+reviewer/
+
+# Example environment file is documentation, not a secret.
+!.env.example
+
+# Local SQLite data (RESUMEIQ_DB_PATH)
+*.db
+*.db-journal

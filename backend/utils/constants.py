@@ -9,7 +9,7 @@ ERROR_EMPTY_FILE = "The uploaded file is empty."
 ERROR_FILE_TOO_LARGE = f"File size exceeds the {MAX_FILE_SIZE_MB}MB limit."
 
 SKILL_CATEGORIES = {
-    "Languages": [
+    "Programming Languages": [
         "python", "java", "javascript", "typescript", "c++", "c#", "golang",
         "rust", "php", "ruby", "swift", "kotlin", "scala", "r", "matlab",
     ],
@@ -19,9 +19,9 @@ SKILL_CATEGORIES = {
     ],
     "Backend": [
         "node.js", "express", "django", "flask", "fastapi", "spring",
-        "spring boot", ".net", "asp.net", "laravel", "ruby on rails",
+        "spring boot", ".net", "asp.net", "laravel", "ruby on rails", "streamlit",
     ],
-    "Cloud": ["aws", "azure", "gcp"],
+    "Cloud & DevOps": ["aws", "azure", "gcp", "docker", "kubernetes", "terraform", "jenkins", "ci/cd", "github actions"],
     "Cybersecurity": [
         "splunk", "microsoft sentinel", "elastic siem", "siem",
         "sigma rule authoring", "mitre att&ck", "att&ck mapping", "mitre",
@@ -37,18 +37,22 @@ SKILL_CATEGORIES = {
         "vulnerability scanning", "log analysis", "security operations",
         "soc", "firewall configuration", "ids/ips",
     ],
-    "Database": [
+    "Databases": [
         "sql", "mysql", "postgresql", "mongodb", "redis", "sqlite",
-        "elasticsearch",
+        "elasticsearch", "sql server",
     ],
-    "Data & AI": [
+    "Data Science & AI": [
         "data analysis", "data science", "pandas", "numpy", "power bi",
         "tableau", "excel", "machine learning", "deep learning",
         "tensorflow", "pytorch", "natural language processing",
-        "computer vision",
+        "computer vision", "scikit-learn", "xgboost", "random forest",
+        "hugging face", "explainable ai", "predictive modeling", "mlflow",
+        "rag", "chromadb", "llms",
     ],
-    "Tools": [
-        "docker", "kubernetes", "terraform", "jenkins", "ci/cd", "linux",
+    "Data Engineering": ["data warehousing", "etl", "data pipelines", "apache spark", "hadoop"],
+    "Automation & Testing": ["playwright", "pytest", "tesseract ocr", "python automation", "watchdog", "ocr"],
+    "Development Tools": [
+        "linux",
         "git", "github", "gitlab", "bash", "agile", "scrum", "jira",
         "confluence", "rest api", "graphql", "microservices", "salesforce",
         "sap",
@@ -106,3 +110,41 @@ SKILL_CATEGORIES = {
 
 KNOWN_SKILLS = [skill for skills in SKILL_CATEGORIES.values() for skill in skills]
 
+
+# Aliases are evidence-equivalent spellings, not inferred related technologies.
+SKILL_ALIASES = {
+    "sklearn": "scikit-learn", "scikit learn": "scikit-learn",
+    "nlp": "natural language processing", "rest apis": "rest api",
+    "react.js": "react", "reactjs": "react", "nodejs": "node.js",
+    "dotnet": ".net", "llm": "llms",
+    "go": "golang",
+}
+SKILL_DISPLAY_NAMES = {
+    "python": "Python", "java": "Java", "javascript": "JavaScript",
+    "typescript": "TypeScript", "c++": "C++", "c#": "C#", "r": "R",
+    ".net": ".NET", "asp.net": "ASP.NET", "node.js": "Node.js",
+    "next.js": "Next.js", "react": "React", "fastapi": "FastAPI",
+    "sql": "SQL", "sqlite": "SQLite", "sql server": "SQL Server",
+    "mysql": "MySQL", "postgresql": "PostgreSQL", "mongodb": "MongoDB",
+    "pandas": "Pandas", "numpy": "NumPy", "scikit-learn": "Scikit-learn",
+    "xgboost": "XGBoost", "random forest": "Random Forest",
+    "natural language processing": "Natural Language Processing",
+    "hugging face": "Hugging Face", "explainable ai": "Explainable AI",
+    "predictive modeling": "Predictive Modeling", "mlflow": "MLflow",
+    "rag": "RAG", "chromadb": "ChromaDB", "llms": "LLMs",
+    "data warehousing": "Data Warehousing", "etl": "ETL",
+    "data pipelines": "Data Pipelines", "apache spark": "Apache Spark",
+    "hadoop": "Hadoop", "streamlit": "Streamlit", "playwright": "Playwright",
+    "pytest": "Pytest", "tesseract ocr": "Tesseract OCR",
+    "github actions": "GitHub Actions", "rest api": "REST API",
+    "python automation": "Python Automation", "watchdog": "Watchdog",
+    "ocr": "OCR", "power bi": "Power BI", "tableau": "Tableau",
+    "git": "Git", "github": "GitHub", "ci/cd": "CI/CD", "ids/ips": "IDS/IPS",
+    # Acronyms and brand casing that title-case would get wrong ("Aws", "Graphql").
+    "aws": "AWS", "gcp": "GCP", "golang": "Go", "graphql": "GraphQL", "html": "HTML",
+    "css": "CSS", "php": "PHP", "jquery": "jQuery", "vue": "Vue", "edr": "EDR",
+    "soc": "SOC", "nist": "NIST", "hris": "HRIS", "kape": "KAPE", "siem": "SIEM",
+    "iso 27001": "ISO 27001", "mitre att&ck": "MITRE ATT&CK", "mitre": "MITRE",
+    "att&ck mapping": "ATT&CK Mapping", "azure ad": "Azure AD", "cloudtrail": "CloudTrail",
+    "elastic siem": "Elastic SIEM", "tailwind css": "Tailwind CSS",
+}
