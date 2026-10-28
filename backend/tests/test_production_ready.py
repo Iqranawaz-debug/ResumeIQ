@@ -59,6 +59,15 @@ class CertificationTests(OfflineTestCase):
         self.assertEqual(row['status'], 'unclear')
 
 
+class SimilarWordingTests(OfflineTestCase):
+    def test_reason_uses_the_right_article_for_each_section(self):
+        candidate = {'skills': [], 'experience': [{'details': ['Mentored two junior engineers weekly.']}],
+                     'projects': [{'details': ['Organised community hackathon events yearly.']}]}
+        rows = evaluate_requirement_lines(candidate, 'Responsibilities:\n- Mentor junior engineers\n- Organised hackathon events')['rows']
+        self.assertTrue(rows[0]['reason'].startswith('Similar wording in an experience description'))
+        self.assertTrue(rows[1]['reason'].startswith('Similar wording in a project description'))
+
+
 class SampleTests(OfflineAsyncTestCase):
     def setUp(self):
         super().setUp()
