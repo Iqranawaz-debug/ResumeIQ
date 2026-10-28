@@ -64,6 +64,24 @@ export function withTags(row, tags) {
   return { ...row, tags: [...tags] }
 }
 
+// Pipeline board: one column per existing review status, cards in the given (upload) order.
+// Nothing here sorts by score; rows with an unknown status are not placed in any column.
+export function groupByStatus(rows) {
+  return REVIEW_STATUSES.map((status) => ({ status, rows: (rows || []).filter((row) => row.status === status) }))
+}
+export function topTags(row, limit = 3) {
+  const tags = row.tags || []
+  return { shown: tags.slice(0, limit), hidden: Math.max(0, tags.length - limit) }
+}
+// Short, neutral evidence line for a board card (counts and a few matched skill names, never a score).
+export function evidenceSummary(row) {
+  if (row.analysis_state !== 'completed') return row.analysis_state === 'outdated' ? 'Analysis outdated: re-run for this job version' : 'Not analyzed yet'
+  const matched = row.matched_skill_names || row.matched_skills || []
+  const missing = row.missing_skill_names || row.missing_skills || []
+  const names = matched.slice(0, 3).join(', ')
+  return `${matched.length} matched · ${missing.length} not evidenced${names ? ` · ${names}` : ''}`
+}
+
 // Export wording shared with the CSV (backend/recruiter.py score_label) so both read the same.
 export function scoreLabel(analysis) {
   if (!analysis || analysis.overall_score == null) return 'Not scored yet'

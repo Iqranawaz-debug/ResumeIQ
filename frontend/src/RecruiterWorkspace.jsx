@@ -5,6 +5,7 @@ import { ANNOTATION_LIMITS, EMPTY_FILTERS, REVIEW_STATUSES, allTags, filterCandi
 import RecruiterComparison from './RecruiterComparison'
 import CandidateAnnotations from './CandidateAnnotations'
 import ComparisonReport from './ComparisonReport'
+import PipelineBoard from './PipelineBoard'
 
 const STEPS = [
   { title: 'Create a job workspace', text: 'Add the job title and the job description every candidate will be compared against.' },
@@ -52,6 +53,7 @@ export default function RecruiterWorkspace({ token }) {
   const [exporting, setExporting] = useState(null)
   const [exportError, setExportError] = useState('')
   const [printData, setPrintData] = useState(null)
+  const [view, setView] = useState('list')
   const alive = useRef(true)
   const controllers = useRef(new Set())
   const stop = useRef(false)
@@ -289,8 +291,16 @@ export default function RecruiterWorkspace({ token }) {
         </div>}
 
         {!candidates.length && <p className="empty-state rw-empty">No candidates yet. Upload resumes above to start screening.</p>}
+        {candidates.length > 0 && <div className="rw-view-toggle">
+          <span className="rw-segmented" role="group" aria-label="Candidate view">
+            <button type="button" className={view === 'list' ? 'active' : ''} aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button>
+            <button type="button" className={view === 'board' ? 'active' : ''} aria-pressed={view === 'board'} onClick={() => setView('board')}>Board</button>
+          </span>
+          <span className="rw-hint">{view === 'board' ? 'Columns are review statuses; cards stay in upload order.' : 'Candidates stay in upload order.'}</span>
+        </div>}
         {candidates.length > 0 && !visible.length && <p className="empty-state rw-empty">No candidates match these filters.</p>}
-        {visible.length > 0 && <div className="recruiter-table" tabIndex={0} role="region" aria-label="Candidate list, scroll horizontally if needed">
+        {view === 'board' && visible.length > 0 && <PipelineBoard rows={visible} busy={busy} onMove={review} />}
+        {view === 'list' && visible.length > 0 && <div className="recruiter-table" tabIndex={0} role="region" aria-label="Candidate list, scroll horizontally if needed">
           <table><thead><tr><th scope="col"><span className="visually-hidden">Select</span></th><th scope="col">Candidate</th><th scope="col">Analysis</th><th scope="col">Review status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
             <tbody>{visible.map((row) => <tr key={row.id} className={selected.includes(row.id) ? 'selected' : ''}>
               <td><input aria-label={`Compare ${row.name || row.filename}`} type="checkbox" disabled={busy || (!selected.includes(row.id) && selected.length >= limits.compare)} checked={selected.includes(row.id)} onChange={(e) => { setSelected((values) => e.target.checked ? [...values, row.id] : values.filter((id) => id !== row.id)); setRows([]) }} /></td>
@@ -320,7 +330,7 @@ export default function RecruiterWorkspace({ token }) {
         </div>}
 
         {candidates.length > 0 && <div className="rw-compare-bar">
-          <p className="rw-hint">Select up to {limits.compare} analyzed candidates from this job version. AI and local scores are not equally calibrated. No automatic ranking is applied.</p>
+          <p className="rw-hint">{view === 'board' && 'Switch to List to choose candidates to compare. '}Select up to {limits.compare} analyzed candidates from this job version. AI and local scores are not equally calibrated. No automatic ranking is applied.</p>
           <button type="button" className="rw-button rw-primary" disabled={busy || !selected.length} onClick={() => run(async () => { const result = await request(`/${group.id}/comparison`, json('POST', { candidate_ids: selected, version: group.version })); if (alive.current) { setRows(result.candidates); setMessage(result.notice) } })}>Compare selected candidates</button>
         </div>}
       </section>
