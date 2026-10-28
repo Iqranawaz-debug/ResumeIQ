@@ -1,6 +1,11 @@
 import { test, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { apiRequest, analysisForm } from '../src/api.js'
+import { apiRequest, analysisForm, DEMO_MODE, DEMO_NOTICE } from '../src/api.js'
+
+test('public demo notice is off unless VITE_DEMO_MODE=true at build time', () => {
+  assert.equal(DEMO_MODE, false)
+  assert.match(DEMO_NOTICE, /fictional sample/)
+})
 
 const originalFetch = globalThis.fetch
 const originalWindow = globalThis.window

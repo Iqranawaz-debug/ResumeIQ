@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import BrandMark from './BrandMark'
 import ThemeToggle from './ThemeToggle'
-import { API_BASE_URL, apiRequest } from './api'
+import { API_BASE_URL, DEMO_MODE, DEMO_NOTICE, apiRequest } from './api'
 
 const SIGNUP_URL = `${API_BASE_URL}/api/signup`
 const LOGIN_URL = `${API_BASE_URL}/api/login`
@@ -69,6 +69,7 @@ function Auth({ onAuthSuccess, theme, onToggleTheme }) {
               {mode === 'login' ? 'Create an account' : 'Sign in'}
             </button>
           </p>
+          {DEMO_MODE && <p className="banner banner-info demo-notice" role="note">{DEMO_NOTICE}</p>}
 
           <form className="auth-form" onSubmit={handleSubmit}>
             {mode === 'signup' && (

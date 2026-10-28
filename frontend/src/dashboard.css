@@ -360,3 +360,33 @@
 @media (max-width: 640px) {
   .version-columns, .version-comparison .requirement-row { grid-template-columns: 1fr; }
 }
+
+.demo-notice { margin-top: var(--space-4); }
+
+/* Mobile top bar: brand and log out on one row, nav scrolling underneath. */
+@media (max-width: 860px) {
+  .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "brand footer" "nav nav";
+    align-items: center;
+    gap: 10px 12px;
+    padding: 12px 16px;
+    overflow: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-brand { grid-area: brand; padding: 0; min-width: 0; }
+  .sidebar-footer { grid-area: footer; margin: 0; padding: 0; border: none; flex-direction: row; align-items: center; }
+  .sidebar-user-email { display: none; }
+  .sidebar-nav {
+    grid-area: nav;
+    flex-direction: row;
+    gap: 4px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sidebar-nav::-webkit-scrollbar { display: none; }
+  .sidebar-nav-item { width: auto; flex: none; white-space: nowrap; padding: 8px 12px; }
+}

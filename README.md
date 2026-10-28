@@ -48,11 +48,19 @@ Also included: light and dark themes, keyboard-accessible tabs, a responsive lay
 
 ## 🖼️ Project showcase
 
-Add screenshots of the running app to `docs/screenshots/` and update the table below. The bundled fictional sample is ideal for this because it contains no real personal data.
+All screenshots use the bundled fictional sample resume, so they contain no real personal data.
 
-| Upload & sample | Requirement review | Score breakdown | Improvement assistant |
-|---|---|---|---|
-| _screenshot_ | _screenshot_ | _screenshot_ | _screenshot_ |
+<p align="center">
+  <img src="docs/screenshots/00-hero-dark.png" alt="Results summary in dark mode: score ring, quality and job-fit tiles, strongest matches and most important gaps" width="900">
+</p>
+
+| Requirement review | Score breakdown |
+|---|---|
+| <img src="docs/screenshots/03-requirements.png" alt="Requirement-by-requirement review with statuses, reasons and quoted resume evidence" width="440"> | <img src="docs/screenshots/04-score-breakdown.png" alt="Score explanation with formula, component points and weights" width="440"> |
+| **Improvement assistant** | **Document readability** |
+| <img src="docs/screenshots/05-improve.png" alt="What would change this score, with estimated deltas, and the improvement workspace" width="440"> | <img src="docs/screenshots/06-document.png" alt="Document readability findings with fixes" width="440"> |
+| **Upload with one-click sample** | **Extracted resume information** |
+| <img src="docs/screenshots/01-upload.png" alt="Upload step with the fictional sample loaded" width="440"> | <img src="docs/screenshots/02-resume-information.png" alt="Extracted contact details, skills by category, experience, projects and certifications" width="440"> |
 
 ## 🏗️ How it works
 
@@ -156,6 +164,25 @@ npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 
 Open **http://localhost:5173**, create a local account, then choose **Try a fictional sample** to see every feature. API docs are at http://localhost:8000/docs.
 
+## 🌐 Deployment (free tier: Render + Vercel)
+
+The API runs on **Render** from `backend/Dockerfile` (blueprint: [`render.yaml`](render.yaml)). The static site runs on **Vercel** from `frontend/` (config: [`frontend/vercel.json`](frontend/vercel.json)).
+
+1. **API on Render:** in the Render dashboard, choose **New → Blueprint** and select this repository. When asked, set:
+   - `ALLOWED_ORIGINS`: leave it empty for now; you'll fill it in at step 3.
+   - `AI_API_KEY`: optional; leave it empty for local rules only.
+
+   After the deploy finishes, open `https://<your-api>.onrender.com/api/health`. It should show `{"status":"ok",...}`.
+2. **Site on Vercel:** choose **Add New → Project**, import this repository, and set **Root Directory** to `frontend`. Add these environment variables, then deploy:
+   - `VITE_API_BASE_URL` = `https://<your-api>.onrender.com`
+   - `VITE_DEMO_MODE` = `true`
+3. **Connect the two:** back in Render, set `ALLOWED_ORIGINS` to your Vercel address (for example `https://resumeiq.vercel.app`, with no trailing slash) and save. Render redeploys automatically.
+
+What to expect on the free tiers:
+- **Slow first request.** The API sleeps after about 15 minutes idle, so the first request then takes up to a minute (the demo notice says so).
+- **Temporary data.** The free instance has no persistent disk, so demo accounts and data are erased on restart.
+- **Your AI key pays for visitors.** If you set `AI_API_KEY`, visitors who tick an AI option use your key and quota. Keep the key only in Render's environment settings, never in the repository or in `VITE_*` values.
+
 ## ⚙️ Configuration
 
 Every value is optional. See [`.env.example`](.env.example).
@@ -165,11 +192,13 @@ Every value is optional. See [`.env.example`](.env.example).
 | `AI_API_KEY` | Enables opt-in AI job matching and AI wording suggestions. Backend only; never put secrets in `VITE_*` values. (`OPENROUTER_API_KEY` is still accepted.) |
 | `AI_BASE_URL` | Any OpenAI-compatible endpoint (https only); default `https://openrouter.ai/api/v1` |
 | `AI_MODEL` | Model ID for that provider; default `openai/gpt-oss-20b:free` (`OPENROUTER_MODEL` is still accepted) |
-| `ALLOWED_ORIGINS` | `http://localhost:5173`; comma-separated, exact scheme, host and port |
+| `ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173`; comma-separated, exact scheme, host and port |
 | `RESUMEIQ_DB_PATH` | Empty keeps working data in memory only. A file path persists it in SQLite. |
 | `DATA_RETENTION_SECONDS` | `7200`; inactive users' working data is erased after this period |
 | `SESSION_TTL_SECONDS` | `3600` |
 | `VITE_API_BASE_URL` | Frontend build setting; `http://localhost:8000` |
+| `VITE_DEMO_MODE` | Frontend build setting; `true` shows the public-demo notice (use the fictional sample; temporary data) |
+| `FORWARDED_ALLOW_IPS` | Set to `*` only behind a trusted proxy (for example Render) so rate limiting sees real client addresses |
 | `MAX_RESUME_BYTES`, `MAX_JD_BYTES`, `MAX_TEXT_CHARS`, `MAX_PDF_PAGES`, … | Resource limits (see `backend/utils/limits.py`) |
 
 The backend doesn't load `.env` by itself. Docker Compose passes it in; locally, use Uvicorn's `--env-file`.

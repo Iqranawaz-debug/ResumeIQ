@@ -3,6 +3,19 @@ import { API_BASE_URL, apiRequest } from './api'
 import { EMPTY_FILTERS, REVIEW_STATUSES, filterCandidates, validateBatch } from './recruiterState'
 import RecruiterComparison from './RecruiterComparison'
 
+const STEPS = [
+  { title: 'Create a job workspace', text: 'Add the job title and the job description every candidate will be compared against.' },
+  { title: 'Upload resumes', text: 'Drop in up to 5 PDF or DOCX resumes at a time. Extraction runs locally; duplicates are detected.' },
+  { title: 'Analyze, review, compare', text: 'Score everyone against the same job, set review statuses and compare up to 4 side by side.' },
+]
+const ANALYSIS_TONE = { completed: 'success', outdated: 'warning', pending: 'neutral' }
+const REVIEW_TONE = { Shortlisted: 'success', 'Under Review': 'warning', 'Not Selected': 'danger', 'Not Reviewed': 'neutral' }
+const OUTCOME_TONE = { success: 'success', duplicate: 'neutral' }
+
+function formatBytes(bytes) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
 export default function RecruiterWorkspace({ token }) {
   const [groups, setGroups] = useState([])
   const [group, setGroup] = useState(null)
@@ -18,6 +31,8 @@ export default function RecruiterWorkspace({ token }) {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [progress, setProgress] = useState(null)
+  const [loaded, setLoaded] = useState(false)
+  const [moreFilters, setMoreFilters] = useState(false)
   const alive = useRef(true)
   const controllers = useRef(new Set())
   const stop = useRef(false)
@@ -41,7 +56,7 @@ export default function RecruiterWorkspace({ token }) {
     apiRequest(`${API_BASE_URL}/api/workspaces`, { signal: controller.signal, headers: { Authorization: `Bearer ${token}` } })
       .then((data) => { if (!controller.signal.aborted) { setGroups(data.workspaces); setLimits(data.limits) } })
       .catch((err) => { if (!controller.signal.aborted) setError(err.message) })
-      .finally(() => pending.delete(controller))
+      .finally(() => { pending.delete(controller); if (!controller.signal.aborted) setLoaded(true) })
     return () => { alive.current = false; stop.current = true; for (const controller of pending) controller.abort() }
   }, [token])
 
@@ -112,65 +127,176 @@ export default function RecruiterWorkspace({ token }) {
   }
   const visible = filterCandidates(group?.candidates, filters)
   function filter(key, value) { setFilters((state) => ({ ...state, [key]: value })) }
+  const candidates = group?.candidates || []
+  const analyzed = candidates.filter((row) => row.analysis_state === 'completed').length
+  const shortlisted = candidates.filter((row) => row.status === 'Shortlisted').length
+  const filtersActive = Object.values(filters).some(Boolean)
+  const advancedActive = Boolean(filters.source || filters.processing || filters.matched || filters.missing)
+  const progressPercent = progress ? Math.round(((progress.completed + progress.failed) / Math.max(progress.total, 1)) * 100) : 0
+
+  const jobForm = (
+      <form className="rw-card rw-job" onSubmit={save}>
+        <div className="rw-card-head">
+          <h2>{group ? 'Job details' : 'Create a job workspace'}</h2>
+          {group && <span className="status-chip tone-neutral">Job version {group.version}</span>}
+        </div>
+        <label className="rw-field">Job title<input required maxLength={120} value={title} disabled={busy} placeholder="e.g. Senior Backend Engineer" onChange={(e) => setTitle(e.target.value)} /></label>
+        <label className="rw-field">Shared job description<textarea required maxLength={100000} rows={6} value={description} disabled={busy} placeholder="Paste the full job description, including requirements and responsibilities." onChange={(e) => setDescription(e.target.value)} /></label>
+        <div className="rw-actions">
+          <button className="rw-button rw-primary" disabled={busy}>{group ? 'Save job changes' : 'Create workspace'}</button>
+          {group && <span className="rw-hint">Changing the description starts a new job version; earlier analyses must be re-run before comparing.</span>}
+        </div>
+      </form>
+  )
+  const uploadSection = (
+      <section className="rw-card" aria-labelledby="rw-upload-heading">
+        <div className="rw-card-head">
+          <h2 id="rw-upload-heading">Bulk upload</h2>
+          <span className="rw-hint">Up to {limits.files} PDF/DOCX files · 10 MB per batch · processed locally, no AI</span>
+        </div>
+        <label className={`rw-dropzone ${busy ? 'disabled' : ''}`}>
+          <input className="visually-hidden" aria-label="Select resumes" type="file" multiple accept=".pdf,.docx" disabled={busy} onChange={(e) => { setFiles(Array.from(e.target.files || [])); e.target.value = '' }} />
+          <span className="dropzone-icon" aria-hidden="true">⬆</span>
+          <span className="dropzone-text">Choose resumes to add to <strong>{group?.title}</strong></span>
+          <span className="dropzone-hint">Duplicates of resumes already in this workspace are skipped automatically.</span>
+        </label>
+        {files.length > 0 && <ul className="rw-file-list">{files.map((file, index) => <li key={`${file.name}-${index}`}>
+          <span className="rw-file-name">{file.name}</span><span className="rw-hint">{formatBytes(file.size)}</span>
+          <button type="button" className="rw-icon-button" aria-label={`Remove file ${index + 1}`} title="Remove" disabled={busy} onClick={() => setFiles((values) => values.filter((_, i) => i !== index))}>Remove</button>
+        </li>)}</ul>}
+        <div className="rw-actions">
+          <button type="button" className="rw-button rw-primary" disabled={busy || !files.length} onClick={upload}>Process selected files</button>
+        </div>
+        {batch && <div className="rw-batch" aria-label="Batch outcomes">
+          <p className="rw-hint">Last batch: {batch.completed} completed · {batch.failed} failed · {batch.pending} pending · {batch.total} total</p>
+          <ul>{batch.outcomes.map((item) => <li key={item.index}>
+            <span className={`status-chip tone-${item.state === 'failed' ? 'danger' : OUTCOME_TONE[item.kind] || 'neutral'}`}>{item.state === 'failed' ? 'Failed' : item.kind === 'duplicate' ? 'Duplicate' : 'Added'}</span>
+            <span className="rw-file-name">{item.filename}</span><span className="rw-hint">{item.message}</span>
+          </li>)}</ul>
+        </div>}
+      </section>
+  )
+  const candidatesSection = (
+      <section className="rw-card" aria-labelledby="rw-candidates-heading">
+        <div className="rw-card-head">
+          <h2 id="rw-candidates-heading">Candidates</h2>
+          <div className="rw-actions rw-inline">
+            <button type="button" className="rw-button rw-primary" disabled={busy || !candidates.length} onClick={() => analyze(false)}>Analyze group locally</button>
+            <button type="button" className="rw-button" disabled={busy || !candidates.length} onClick={() => analyze(true)}>Analyze group with AI assistance</button>
+            {busy && progress && <button type="button" className="rw-button rw-small" onClick={() => { stop.current = true; setMessage('Stopping after the current candidate completes.') }}>Stop after current candidate</button>}
+          </div>
+        </div>
+        <p className="rw-hint">AI assistance sends allowlisted candidate fields and the shared job description to the configured provider, one candidate at a time. Contacts, organizations, projects and evidence records are excluded; redaction is best effort. Provider failures fall back to local rules.</p>
+        {progress && <div className="rw-progress" role="status">
+          <div className="rw-progress-track"><div className="rw-progress-fill" style={{ width: `${progressPercent}%` }} /></div>
+          <span>{progress.completed} analyzed · {progress.failed} failed · {progress.pending} pending · {progress.total} total</span>
+        </div>}
+
+        {candidates.length > 0 && <div className="recruiter-filters">
+          <label className="rw-field rw-search">Search candidates<input value={filters.search} placeholder="Name, skill, title or status" onChange={(e) => filter('search', e.target.value)} /></label>
+          <label className="rw-field">Review filter<select value={filters.review} onChange={(e) => filter('review', e.target.value)}><option value="">All reviews</option>{REVIEW_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
+          <label className="rw-field">Analysis filter<select value={filters.analysis} onChange={(e) => filter('analysis', e.target.value)}><option value="">All analyses</option>{['pending', 'completed', 'outdated'].map((value) => <option key={value}>{value}</option>)}</select></label>
+          {moreFilters && <>
+            <label className="rw-field">Score source filter<select value={filters.source} onChange={(e) => filter('source', e.target.value)}><option value="">All sources</option><option value="rule-based">Local</option><option value="ai">AI</option></select></label>
+            <label className="rw-field">Processing filter<select value={filters.processing} onChange={(e) => filter('processing', e.target.value)}><option value="">All processing states</option><option>processing</option><option>completed</option></select></label>
+            <label className="rw-field">Matched skill filter<input value={filters.matched} placeholder="e.g. Python" onChange={(e) => filter('matched', e.target.value)} /></label>
+            <label className="rw-field">Not-evidenced skill filter<input value={filters.missing} placeholder="e.g. Kubernetes" onChange={(e) => filter('missing', e.target.value)} /></label>
+          </>}
+          <div className="rw-filter-actions">
+            <button type="button" className="link-button" aria-expanded={moreFilters} onClick={() => setMoreFilters((value) => !value)}>
+              {moreFilters ? 'Fewer filters' : `More filters${advancedActive ? ' (active)' : ''}`}
+            </button>
+            <button type="button" className="rw-button rw-small" disabled={!filtersActive} onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</button>
+          </div>
+        </div>}
+
+        {!candidates.length && <p className="empty-state rw-empty">No candidates yet. Upload resumes above to start screening.</p>}
+        {candidates.length > 0 && !visible.length && <p className="empty-state rw-empty">No candidates match these filters.</p>}
+        {visible.length > 0 && <div className="recruiter-table" tabIndex={0} role="region" aria-label="Candidate list, scroll horizontally if needed">
+          <table><thead><tr><th scope="col"><span className="visually-hidden">Select</span></th><th scope="col">Candidate</th><th scope="col">Analysis</th><th scope="col">Review status</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>{visible.map((row) => <tr key={row.id} className={selected.includes(row.id) ? 'selected' : ''}>
+              <td><input aria-label={`Compare ${row.name || row.filename}`} type="checkbox" disabled={busy || (!selected.includes(row.id) && selected.length >= limits.compare)} checked={selected.includes(row.id)} onChange={(e) => { setSelected((values) => e.target.checked ? [...values, row.id] : values.filter((id) => id !== row.id)); setRows([]) }} /></td>
+              <td>
+                <p className="rw-candidate-name">{row.name || 'Name not found'}</p>
+                <p className="rw-hint">{row.filename}</p>
+                {(row.skills || []).length > 0 && <ul className="rw-skill-chips">{row.skills.slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}{row.skills.length > 6 && <li>+{row.skills.length - 6}</li>}</ul>}
+              </td>
+              <td>
+                {row.overall_score != null && <p className="rw-score">{row.overall_score}<small>/100</small></p>}
+                <span className={`status-chip tone-${ANALYSIS_TONE[row.analysis_state] || 'neutral'}`}>{row.analysis_state}</span>
+                <p className="rw-hint">{row.score_source === 'ai' ? 'AI score' : row.score_source ? 'Local score' : 'Not scored yet'}</p>
+                {row.analysis_error && <p className="rw-hint rw-error">{row.analysis_error}</p>}
+              </td>
+              <td><label className="rw-field rw-review">
+                <span className="visually-hidden">Review {row.name || row.filename}</span>
+                <span className={`status-chip tone-${REVIEW_TONE[row.status] || 'neutral'}`} aria-hidden="true">{row.status}</span>
+                <select disabled={busy} value={row.status} onChange={(e) => review(row, e.target.value)}>{REVIEW_STATUSES.map((status) => <option key={status}>{status}</option>)}</select>
+              </label></td>
+              <td className="rw-row-actions">
+                <button type="button" className="rw-button rw-small" disabled={busy} onClick={() => run(async () => { const detail = await request(`/${group.id}/candidates/${row.id}`); if (alive.current) setRows([detail]) })}>Review candidate</button>
+                <button type="button" className="rw-button rw-small rw-quiet" disabled={busy} onClick={() => run(async () => { await request(`/${group.id}/candidates/${row.id}`, { method: 'DELETE' }); setRows([]); setSelected((values) => values.filter((id) => id !== row.id)); await refresh(group.id) })}>Remove candidate</button>
+              </td>
+            </tr>)}</tbody></table>
+        </div>}
+
+        {candidates.length > 0 && <div className="rw-compare-bar">
+          <p className="rw-hint">Select up to {limits.compare} analyzed candidates from this job version. AI and local scores are not equally calibrated. No automatic ranking is applied.</p>
+          <button type="button" className="rw-button rw-primary" disabled={busy || !selected.length} onClick={() => run(async () => { const result = await request(`/${group.id}/comparison`, json('POST', { candidate_ids: selected, version: group.version })); if (alive.current) { setRows(result.candidates); setMessage(result.notice) } })}>Compare selected candidates</button>
+        </div>}
+      </section>
+  )
+
   return <section className="recruiter-workspace" aria-label="Recruitment workspaces">
-    <h1>Recruitment workspaces</h1>
-    <p>Private to your account. Stored in server memory only; restart loses workspaces and review decisions. Human review is required. No automatic ranking, shortlisting or rejection.</p>
-    <div className="improvement-actions">
-      <button disabled={busy} onClick={reset}>New workspace</button>
-      <label>Open workspace<select disabled={busy} value={group?.id || ''} onChange={(event) => { if (event.target.value) run(() => open(event.target.value)); else reset() }}>
-        <option value="">Choose a workspace</option>{groups.map((item) => <option key={item.id} value={item.id}>{item.title} ({item.candidate_count})</option>)}
-      </select></label>
+    <header className="rw-header">
+      <p className="eyebrow">/ RECRUITMENT</p>
+      <h1>Recruitment workspaces</h1>
+      <p className="subtitle">Screen several candidates against one job description. Human review only: no automatic ranking, shortlisting or rejection.</p>
+    </header>
+
+    <div className="rw-card rw-switcher">
+      <label className="rw-field">Open workspace
+        <select disabled={busy || !groups.length} value={group?.id || ''} onChange={(event) => { if (event.target.value) run(() => open(event.target.value)); else reset() }}>
+          <option value="">{groups.length ? 'Choose a workspace' : 'No workspaces yet'}</option>
+          {groups.map((item) => <option key={item.id} value={item.id}>{item.title} ({item.candidate_count})</option>)}
+        </select>
+      </label>
+      <button type="button" className="rw-button" disabled={busy} onClick={reset}>New workspace</button>
+      <p className="rw-switcher-note">{groups.length} of {limits.groups ?? 5} workspaces · private to your account · kept as described under Privacy &amp; data</p>
     </div>
-    <form onSubmit={save}>
-      <label>Job title<input required maxLength={120} value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} /></label>
-      <label>Shared job description<textarea required maxLength={100000} rows={5} value={description} disabled={busy} onChange={(e) => setDescription(e.target.value)} /></label>
-      <button className="evaluate-button" disabled={busy}>{group ? 'Save job changes' : 'Create workspace'}</button>
-    </form>
-    {error && <p role="alert" className="status error">{error} <button disabled={busy} onClick={() => run(() => group ? open(group.id) : list())}>Refresh workspace</button></p>}
-    {message && <p role="status">{message}</p>}
+
+    {loaded && !groups.length && !group && (
+      <ol className="rw-steps" aria-label="How recruitment workspaces work">
+        {STEPS.map((step, index) => <li key={step.title} className="rw-card">
+          <span className="rw-step-number" aria-hidden="true">{index + 1}</span>
+          <h3>{step.title}</h3>
+          <p>{step.text}</p>
+        </li>)}
+      </ol>
+    )}
+
+    {!group && jobForm}
+
+    {error && <div role="alert" className="banner banner-warning rw-banner"><span>{error}</span> <button type="button" className="rw-button rw-small" disabled={busy} onClick={() => run(() => group ? open(group.id) : list())}>Refresh workspace</button></div>}
+    {message && <p role="status" className="banner banner-info rw-banner">{message}</p>}
+
     {group && <>
-      <p>Job version {group.version} · {group.candidates.length} candidates. Changing the description invalidates prior comparisons.</p>
-      <h2>Bulk upload</h2>
-      <p>Up to {limits.files} PDF/DOCX files per batch; 10 MB total and the existing individual file limit. Uploads are local; no AI calls.</p>
-      <label>Select resumes<input type="file" multiple accept=".pdf,.docx" disabled={busy} onChange={(e) => { setFiles(Array.from(e.target.files || [])); e.target.value = '' }} /></label>
-      <ul>{files.map((file, index) => <li key={`${file.name}-${index}`}>{file.name} ({file.size} bytes) <button disabled={busy} onClick={() => setFiles((values) => values.filter((_, i) => i !== index))}>Remove file {index + 1}</button></li>)}</ul>
-      <button disabled={busy || !files.length} onClick={upload}>Process selected files</button>
-      {batch && <div aria-label="Batch outcomes"><p>{batch.completed} completed · {batch.failed} failed · {batch.pending} pending · {batch.total} total</p>
-        <ul>{batch.outcomes.map((item) => <li key={item.index}>{item.filename}: {item.state} ({item.kind}) — {item.message}</li>)}</ul></div>}
-      <h2>Candidates</h2>
-      <div className="improvement-actions">
-        <button disabled={busy || !group.candidates.length} onClick={() => analyze(false)}>Analyze group locally</button>
-        <button disabled={busy || !group.candidates.length} onClick={() => analyze(true)}>Analyze group with AI assistance</button>
-        {busy && progress && <button onClick={() => { stop.current = true; setMessage('Stopping after the current candidate completes.') }}>Stop after current candidate</button>}
+      <dl className="rw-stats">
+        <div className="rw-card"><dt>Candidates</dt><dd>{candidates.length}</dd></div>
+        <div className="rw-card"><dt>Analyzed</dt><dd>{analyzed}<small>/{candidates.length}</small></dd></div>
+        <div className="rw-card"><dt>Shortlisted</dt><dd>{shortlisted}</dd></div>
+        <div className="rw-card"><dt>Selected to compare</dt><dd>{selected.length}<small>/{limits.compare}</small></dd></div>
+      </dl>
+
+      {candidates.length ? <>{candidatesSection}{uploadSection}</> : <>{uploadSection}{candidatesSection}</>}
+
+      {rows.length > 0 && <RecruiterComparison rows={rows} busy={busy} onReview={review} />}
+
+      {jobForm}
+
+      <div className="rw-danger">
+        <div><h3>Remove this workspace</h3><p className="rw-hint">Deletes the job, its candidates, analyses and review history. This cannot be undone.</p></div>
+        <button type="button" className="rw-button rw-danger-button" disabled={busy} onClick={() => run(async () => { await request(`/${group.id}`, { method: 'DELETE' }); reset(); await list() })}>Remove workspace and its candidates</button>
       </div>
-      <p>AI assistance explicitly sends existing allowlisted candidate fields and the shared job description to the configured provider, sequentially. Contacts, organizations, projects and evidence records are excluded; redaction is best effort. Provider failures fall back locally.</p>
-      {progress && <p role="status">{progress.completed} analyzed · {progress.failed} failed · {progress.pending} pending · {progress.total} total</p>}
-      <div className="recruiter-filters">
-        <label>Search candidates<input value={filters.search} onChange={(e) => filter('search', e.target.value)} /></label>
-        <label>Review filter<select value={filters.review} onChange={(e) => filter('review', e.target.value)}><option value="">All reviews</option>{REVIEW_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
-        <label>Analysis filter<select value={filters.analysis} onChange={(e) => filter('analysis', e.target.value)}><option value="">All analyses</option>{['pending', 'completed', 'outdated'].map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label>Score source filter<select value={filters.source} onChange={(e) => filter('source', e.target.value)}><option value="">All sources</option><option value="rule-based">Local</option><option value="ai">AI</option></select></label>
-        <label>Processing filter<select value={filters.processing} onChange={(e) => filter('processing', e.target.value)}><option value="">All processing states</option><option>processing</option><option>completed</option></select></label>
-        <label>Matched skill filter<input value={filters.matched} onChange={(e) => filter('matched', e.target.value)} /></label>
-        <label>Not-evidenced skill filter<input value={filters.missing} onChange={(e) => filter('missing', e.target.value)} /></label>
-        <button onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</button>
-      </div>
-      {!visible.length && <p>No candidates match these filters. Upload resumes or clear filters.</p>}
-      <div className="recruiter-table" tabIndex={0} role="region" aria-label="Candidate list, scroll horizontally if needed">
-        <table><thead><tr><th>Select</th><th>Candidate</th><th>Analysis</th><th>Review status</th><th>Actions</th></tr></thead>
-          <tbody>{visible.map((row) => <tr key={row.id}>
-            <td><input aria-label={`Compare ${row.name || row.filename}`} type="checkbox" disabled={busy || (!selected.includes(row.id) && selected.length >= limits.compare)} checked={selected.includes(row.id)} onChange={(e) => { setSelected((values) => e.target.checked ? [...values, row.id] : values.filter((id) => id !== row.id)); setRows([]) }} /></td>
-            <td>{row.name || 'Name not found'}<br />{row.filename}<br />{(row.skills || []).join(', ')}</td>
-            <td>{row.analysis_state} · {row.score_source || 'No score'}{row.overall_score != null && ` · ${row.overall_score} / 100`}{row.analysis_error && <p>{row.analysis_error}</p>}</td>
-            <td><label>Review {row.name || row.filename}<select disabled={busy} value={row.status} onChange={(e) => review(row, e.target.value)}>{REVIEW_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label></td>
-            <td><button disabled={busy} onClick={() => run(async () => { const detail = await request(`/${group.id}/candidates/${row.id}`); if (alive.current) setRows([detail]) })}>Review candidate</button>
-              <button disabled={busy} onClick={() => run(async () => { await request(`/${group.id}/candidates/${row.id}`, { method: 'DELETE' }); setRows([]); setSelected((values) => values.filter((id) => id !== row.id)); await refresh(group.id) })}>Remove candidate</button></td>
-          </tr>)}</tbody></table>
-      </div>
-      <button disabled={busy || !selected.length} onClick={() => run(async () => { const result = await request(`/${group.id}/comparison`, json('POST', { candidate_ids: selected, version: group.version })); if (alive.current) { setRows(result.candidates); setMessage(result.notice) } })}>Compare selected candidates</button>
-      <p>Select up to {limits.compare} candidates from this job version. AI and local scores are not equally calibrated. No automatic ranking is applied.</p>
-      <RecruiterComparison rows={rows} busy={busy} onReview={review} />
-      <button disabled={busy} onClick={() => run(async () => { await request(`/${group.id}`, { method: 'DELETE' }); reset(); await list() })}>Remove workspace and its candidates</button>
     </>}
   </section>
 }

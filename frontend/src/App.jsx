@@ -10,7 +10,8 @@ import PrivacyPanel from './PrivacyPanel'
 import { initializeDraft, updateDraft } from './improvementState'
 import './App.css'
 import './dashboard.css'
-import { API_BASE_URL, apiRequest, analysisForm } from './api'
+import './recruiter.css'
+import { API_BASE_URL, DEMO_MODE, DEMO_NOTICE, apiRequest, analysisForm } from './api'
 
 const UPLOAD_URL = `${API_BASE_URL}/api/upload`
 const SAMPLE_URL = `${API_BASE_URL}/api/upload/sample`
@@ -506,6 +507,7 @@ function App() {
                 )}
                 {uploadStatus === 'error' && <p className="status error">{uploadMessage}</p>}
 
+                {DEMO_MODE && <p className="banner banner-info demo-notice" role="note">{DEMO_NOTICE}</p>}
                 <p className="wizard-note">The file itself is never kept. Extracted details and results are kept only as described under Privacy &amp; data, where you can delete them at any time.</p>
 
                 <div className="wizard-actions">

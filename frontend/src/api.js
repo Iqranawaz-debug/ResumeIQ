@@ -1,5 +1,9 @@
 export const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
 
+// Public deployments set VITE_DEMO_MODE=true to steer visitors to the fictional sample.
+export const DEMO_MODE = import.meta.env?.VITE_DEMO_MODE === 'true'
+export const DEMO_NOTICE = 'Public demo: please use the fictional sample rather than a real resume. Demo accounts and data are temporary and may be erased when the server restarts. The first request can take up to a minute while the server wakes up.'
+
 export async function apiRequest(url, { signal, timeoutMs = 45000, ...options } = {}) {
   const controller = new AbortController()
   let timedOut = false

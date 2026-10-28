@@ -42,7 +42,8 @@ from ai import openrouter_client as ai_client
 # Comma-separated list, e.g. "https://myapp.vercel.app,http://localhost:5173"
 ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+    # Both spellings of the local dev address: Vite prints 127.0.0.1 when started with --host 127.0.0.1.
+    for origin in os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
     if origin.strip()
 ]
 

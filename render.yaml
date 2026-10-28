@@ -1,0 +1,28 @@
+# Render Blueprint for the ResumeIQ API (Dashboard → New → Blueprint → this repo).
+# The frontend is deployed separately on Vercel (see README "Deployment").
+services:
+  - type: web
+    name: resumeiq-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Your Vercel site address, e.g. https://resumeiq.vercel.app (no trailing slash).
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Render's proxy forwards the real client address; trust it for rate limiting.
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      # Optional AI. Leave AI_API_KEY empty to run with local rules only.
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: AI_MODEL
+        value: gemini-2.5-flash
+      # Public demo: keep inactive data for 1 hour.
+      - key: DATA_RETENTION_SECONDS
+        value: "3600"
