@@ -17,7 +17,7 @@ EXTRACTION_PROMPT = (
 
 
 def extract_candidate_info_ai(resume_text: str) -> dict:
-    """Use an LLM (via OpenRouter) to extract structured candidate info from
+    """Use an LLM (via the configured provider) to extract structured candidate info from
     resume text.
 
     Raises on any failure (missing API key, network error, invalid JSON, bad

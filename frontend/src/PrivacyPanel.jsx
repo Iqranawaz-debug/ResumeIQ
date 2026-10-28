@@ -50,7 +50,7 @@ export default function PrivacyPanel({ token, onDeleted, initialSummary = null }
       ) : !error && <p role="status">Loading…</p>}
       <h2>When AI is used</h2>
       <ul className="privacy-facts">
-        <li>AI is used only when you tick an AI option{summary && !summary.ai_provider_configured ? ' — no AI provider is configured on this server, so nothing is sent' : ''}.</li>
+        <li>AI is used only when you tick an AI option{summary && !summary.ai_provider_configured ? ' — no AI provider is configured on this server, so nothing is sent' : ''}{summary?.ai_provider_configured && summary.ai_provider ? `. When you do, data is sent to ${summary.ai_provider}` : ''}.</li>
         <li>AI job matching sends extracted skills, education, and employment titles, dates and descriptions (contact details redacted on a best-effort basis), plus the job description.</li>
         <li>AI wording suggestions send only flagged employment bullets that contain no names, organizations, contact details or sensitive attributes.</li>
         <li>Projects, evidence quotations and your uploaded file are never sent.</li>

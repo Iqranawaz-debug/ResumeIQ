@@ -86,7 +86,7 @@ Business logic lives in the backend. The frontend renders backend results withou
 | Frontend | React 19, Vite 8, plain CSS with design tokens, Oxlint |
 | Backend | Python, FastAPI, Uvicorn, pypdf, python-docx |
 | Matching & scoring | Rule-based Python modules (default) |
-| Optional AI | OpenRouter via the OpenAI SDK |
+| Optional AI | Any OpenAI-compatible provider via the OpenAI SDK (OpenRouter by default, or Google Gemini directly) |
 | Authentication | Local accounts (salted PBKDF2) with bearer sessions |
 | Storage | In memory by default; optional SQLite persistence |
 | Delivery | Docker Compose (nginx + Uvicorn), GitHub Actions CI |
@@ -162,8 +162,9 @@ Every value is optional. See [`.env.example`](.env.example).
 
 | Variable | Default / purpose |
 |---|---|
-| `OPENROUTER_API_KEY` | Enables opt-in AI job matching and AI wording suggestions. Backend only; never put secrets in `VITE_*` values. |
-| `OPENROUTER_MODEL` | `openai/gpt-oss-20b:free` |
+| `AI_API_KEY` | Enables opt-in AI job matching and AI wording suggestions. Backend only; never put secrets in `VITE_*` values. (`OPENROUTER_API_KEY` is still accepted.) |
+| `AI_BASE_URL` | Any OpenAI-compatible endpoint (https only); default `https://openrouter.ai/api/v1` |
+| `AI_MODEL` | Model ID for that provider; default `openai/gpt-oss-20b:free` (`OPENROUTER_MODEL` is still accepted) |
 | `ALLOWED_ORIGINS` | `http://localhost:5173`; comma-separated, exact scheme, host and port |
 | `RESUMEIQ_DB_PATH` | Empty keeps working data in memory only. A file path persists it in SQLite. |
 | `DATA_RETENTION_SECONDS` | `7200`; inactive users' working data is erased after this period |
@@ -172,6 +173,18 @@ Every value is optional. See [`.env.example`](.env.example).
 | `MAX_RESUME_BYTES`, `MAX_JD_BYTES`, `MAX_TEXT_CHARS`, `MAX_PDF_PAGES`, … | Resource limits (see `backend/utils/limits.py`) |
 
 The backend doesn't load `.env` by itself. Docker Compose passes it in; locally, use Uvicorn's `--env-file`.
+
+### Using Google Gemini directly
+
+Create a key in Google AI Studio, then set (PowerShell, before starting the backend):
+
+```powershell
+$env:AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+$env:AI_API_KEY = "your-gemini-key"
+$env:AI_MODEL = "gemini-2.5-flash"
+```
+
+Check Google's documentation for current model IDs. With a Gemini key, opted-in AI requests go to Google; review Google's data-use terms (free-tier data may be used to improve their products) before using real resumes. If the provider rejects a request or returns unusable output, ResumeIQ falls back to local results and shows a banner.
 
 ## 🔒 Privacy and data handling
 

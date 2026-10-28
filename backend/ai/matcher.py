@@ -82,7 +82,7 @@ def match_evidence(candidate: dict, skills: list) -> dict:
 
 
 def match_resume_to_job_ai(candidate: dict, job_description: str) -> dict:
-    """Use an LLM (via OpenRouter) to extract the job's requirements and
+    """Use an LLM (via the configured provider) to extract the job's requirements and
     semantically score the candidate's fit against them.
 
     One retry is made for malformed or inconsistent output (not for network
