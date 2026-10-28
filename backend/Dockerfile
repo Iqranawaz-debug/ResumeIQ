@@ -13,7 +13,9 @@ USER resumeiq
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"
+  CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PORT', '8000') + '/api/health', timeout=3)"
 
-# One worker: sessions are held in process memory.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# One worker: sessions are held in process memory. Hosts such as Render set
+# PORT; behind their proxy, set FORWARDED_ALLOW_IPS so login rate limiting sees
+# real client addresses (uvicorn reads it from the environment).
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

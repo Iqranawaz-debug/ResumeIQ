@@ -1135,16 +1135,6 @@ li {
 .improvement-checklist select { display: block; margin-top: .5rem; background: var(--bg); color: inherit; font: inherit; padding: .5rem; }
 .improvement-report pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .dropzone:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
-.recruiter-workspace { max-width: 1200px; margin: auto; overflow-wrap: anywhere; }
-.recruiter-workspace label { display: flex; flex-direction: column; gap: .4rem; margin-block: .75rem; }
-.recruiter-workspace input:not([type=checkbox]), .recruiter-workspace textarea, .recruiter-workspace select { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; color: var(--text-strong); background: var(--surface-solid); padding: .65rem; border: 1px solid var(--border-strong); border-radius: 8px; }
-.recruiter-workspace button { font: inherit; cursor: pointer; margin: .3rem; padding: .5rem .8rem; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-strong); background: var(--surface-solid); }
-.recruiter-workspace button:disabled { opacity: .5; cursor: not-allowed; }
-.recruiter-workspace :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.recruiter-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: .75rem; }
-.recruiter-table { overflow-x: auto; width: 100%; margin-block: 1rem; }
-.recruiter-table table { border-collapse: collapse; min-width: 680px; width: 100%; }
-.recruiter-table th, .recruiter-table td { padding: .6rem; border: 1px solid var(--border); text-align: left; vertical-align: top; max-width: 260px; }
 .recruiter-comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; margin-block: 1rem; }
 .recruiter-comparison > article { min-width: 0; }
 .recruiter-comparison .breakdown-row { grid-template-columns: 1fr; gap: .35rem; margin-block: .8rem; }

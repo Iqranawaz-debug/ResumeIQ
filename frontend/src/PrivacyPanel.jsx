@@ -42,7 +42,7 @@ export default function PrivacyPanel({ token, onDeleted, initialSummary = null }
           <li>Extracted resume details: {summary.resume_stored ? 'stored' : 'none stored'}{summary.analysis_stored ? ', with an analysis' : ''}.</li>
           <li>Evaluation history: {summary.history_entries} entr{summary.history_entries === 1 ? 'y' : 'ies'}.</li>
           <li>Resume version snapshots (scores, skills and requirement statuses only): {summary.versions ?? 0}.</li>
-          <li>Recruiter workspaces: {summary.workspaces} ({summary.candidates} candidate{summary.candidates === 1 ? '' : 's'}).</li>
+          <li>Recruiter workspaces: {summary.workspaces} ({summary.candidates} candidate{summary.candidates === 1 ? '' : 's'}), including your private notes and tags.</li>
           <li>{summary.storage === 'database'
             ? `Everything above is saved in this server's database so it survives restarts, and is erased after ${retentionText(summary.retention_seconds)} without changes.`
             : `Everything above is held in server memory only and is erased after ${retentionText(summary.retention_seconds)} of inactivity or when the server restarts.`}</li>
@@ -53,7 +53,7 @@ export default function PrivacyPanel({ token, onDeleted, initialSummary = null }
         <li>AI is used only when you tick an AI option{summary && !summary.ai_provider_configured ? ' — no AI provider is configured on this server, so nothing is sent' : ''}{summary?.ai_provider_configured && summary.ai_provider ? `. When you do, data is sent to ${summary.ai_provider}` : ''}.</li>
         <li>AI job matching sends extracted skills, education, and employment titles, dates and descriptions (contact details redacted on a best-effort basis), plus the job description.</li>
         <li>AI wording suggestions send only flagged employment bullets that contain no names, organizations, contact details or sensitive attributes.</li>
-        <li>Projects, evidence quotations and your uploaded file are never sent.</li>
+        <li>Projects, evidence quotations, recruiter notes and tags, and your uploaded file are never sent.</li>
       </ul>
       {error && <p className="status error" role="alert">{error}</p>}
       {message && <p className="status success" role="status">{message}</p>}

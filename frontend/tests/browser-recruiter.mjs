@@ -56,6 +56,7 @@ try{
  })
  await scenario('Search combined skill and review filters and clear',async()=>{
    await page.getByLabel('Search candidates',{exact:true}).fill('mOrGaN');assert.equal(await candidates().count(),1)
+   await button('More filters').click()
    await page.getByLabel('Matched skill filter',{exact:true}).fill('PYTHON');assert.equal(await candidates().count(),1)
    await page.getByLabel('Not-evidenced skill filter',{exact:true}).fill('Docker');assert.equal(await candidates().count(),1)
    await page.getByLabel('Review filter').selectOption('Shortlisted');assert.equal(await candidates().count(),0)

@@ -17,6 +17,11 @@ PDF_PAGES = positive_int("MAX_PDF_PAGES", 50)
 ZIP_ENTRIES = positive_int("MAX_DOCX_ENTRIES", 1000)
 ZIP_BYTES = positive_int("MAX_DOCX_EXPANDED_BYTES", 20 * 1024**2)
 XML_NODES = positive_int("MAX_DOCX_NODES", 50_000)
+# Recruiter notes and tags (private reviewer annotations, never sent to AI).
+NOTE_CHARS = positive_int("MAX_NOTE_CHARS", 2_000)
+NOTES_PER_CANDIDATE = positive_int("MAX_NOTES_PER_CANDIDATE", 100)
+TAGS_PER_CANDIDATE = positive_int("MAX_TAGS_PER_CANDIDATE", 10)
+TAG_CHARS = positive_int("MAX_TAG_CHARS", 30)
 
 
 class DocumentLimitError(ValueError):
