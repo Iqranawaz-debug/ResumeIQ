@@ -195,7 +195,7 @@ def _assess(context, text, candidate, held, years, uncertain_dates):
         excerpt = detail if len(detail) <= 240 else detail[:237].rsplit(' ', 1)[0] + '…'
         evidence = [{'section': section, 'entry_index': index, 'excerpt': excerpt}] if safe_excerpt(excerpt, candidate) else []
         return _row(context, text, kind, 'partial', 'inference',
-                    f"Similar wording in a {section} description ({', '.join(sorted(best_overlap)[:4])}). Similar words do not prove equivalent work.",
+                    f"Similar wording in {'an experience' if section == 'experience' else 'a project'} description ({', '.join(sorted(best_overlap)[:4])}). Similar words do not prove equivalent work.",
                     evidence)
     return _row(context, text, kind, 'unclear', 'none', 'Cannot be assessed automatically from the extracted resume. Review manually.')
 

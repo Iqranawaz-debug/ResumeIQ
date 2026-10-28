@@ -765,7 +765,7 @@ function App() {
             <p className="eyebrow">/ HISTORY</p>
             <h1>Evaluation History</h1>
             {historyError && <p className="status error" role="alert">{historyError}</p>}
-            <p className="subtitle">Your last {history.length} evaluation{history.length === 1 ? '' : 's'}.</p>
+            <p className="subtitle">{history.length ? `Your last ${history.length} evaluation${history.length === 1 ? '' : 's'}.` : 'Your recent evaluations appear here.'}</p>
 
             {history.length > 0 ? (
               <>
