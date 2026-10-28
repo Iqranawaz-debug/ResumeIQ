@@ -34,6 +34,40 @@ export async function apiRequest(url, { signal, timeoutMs = 45000, ...options } 
   }
 }
 
+// Recruiter workspace endpoints. Every path segment is URL-encoded (tags may contain spaces, # or +).
+export function workspaceUrl(...segments) {
+  return [`${API_BASE_URL}/api/workspaces`, ...segments.map((part) => encodeURIComponent(part))].join('/')
+}
+
+function jsonRequest(token, method, body, options = {}) {
+  return {
+    ...options,
+    method,
+    headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }
+}
+
+export function addCandidateNote(token, groupId, candidateId, text, options) {
+  return apiRequest(workspaceUrl(groupId, 'candidates', candidateId, 'notes'), jsonRequest(token, 'POST', { text }, options))
+}
+
+export function editCandidateNote(token, groupId, candidateId, noteId, text, options) {
+  return apiRequest(workspaceUrl(groupId, 'candidates', candidateId, 'notes', noteId), jsonRequest(token, 'PATCH', { text }, options))
+}
+
+export function deleteCandidateNote(token, groupId, candidateId, noteId, options) {
+  return apiRequest(workspaceUrl(groupId, 'candidates', candidateId, 'notes', noteId), jsonRequest(token, 'DELETE', undefined, options))
+}
+
+export function addCandidateTag(token, groupId, candidateId, tag, options) {
+  return apiRequest(workspaceUrl(groupId, 'candidates', candidateId, 'tags'), jsonRequest(token, 'POST', { tag }, options))
+}
+
+export function removeCandidateTag(token, groupId, candidateId, tag, options) {
+  return apiRequest(workspaceUrl(groupId, 'candidates', candidateId, 'tags', tag), jsonRequest(token, 'DELETE', undefined, options))
+}
+
 export function analysisForm(mode, text, file, resumeId, useAI = false) {
   const data = new FormData()
   data.append('resume_id', resumeId || '')

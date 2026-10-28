@@ -224,7 +224,7 @@
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
-.rw-search { grid-column: span 2; }
+.rw-search { grid-column: span 1; }
 .rw-filter-actions {
   grid-column: 1 / -1;
   display: flex;
@@ -296,6 +296,66 @@
   border-radius: var(--radius-lg);
 }
 .rw-danger h3 { font-size: var(--text-md); }
+
+/* Tags (private reviewer labels) */
+.rw-tag-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 6px 0 0; }
+.rw-tag-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 4px 2px 9px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+}
+.rw-tag-chips-static li { padding-right: 9px; }
+.rw-tag-chips button {
+  font: inherit;
+  line-height: 1;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: inherit;
+  background: transparent;
+}
+.rw-tag-chips button:hover:not(:disabled) { background: var(--accent-border); }
+
+/* Notes panel inside the review/comparison cards */
+.rw-annotations {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+}
+.rw-annotations h4 { font-size: var(--text-sm); margin: var(--space-3) 0 var(--space-2); color: var(--text-strong); }
+.rw-annotations h4:first-child { margin-top: 0; }
+.rw-inline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); margin-top: var(--space-3); }
+.rw-inline-form .rw-field { flex: 1 1 180px; margin-bottom: 0; }
+.rw-notes { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.rw-notes li { padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-solid); border: 1px solid var(--border); }
+.rw-note-text { white-space: pre-wrap; color: var(--text-strong); font-size: var(--text-sm); }
+.rw-delete-link { color: var(--danger); }
+.rw-annotations .rw-actions { margin-top: var(--space-2); }
+/* Outrank the generic .candidate-card list indentation from App.css. */
+.recruiter-comparison ul.rw-tag-chips,
+.recruiter-comparison ol.rw-notes { padding-left: 0; }
+.recruiter-comparison > article > label select {
+  display: block;
+  margin-top: 6px;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-strong);
+  background: var(--surface-solid);
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
 
 @media (max-width: 860px) {
   .rw-switcher { grid-template-columns: 1fr; align-items: stretch; }

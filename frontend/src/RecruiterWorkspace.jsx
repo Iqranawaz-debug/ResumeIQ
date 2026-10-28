@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { API_BASE_URL, apiRequest } from './api'
-import { EMPTY_FILTERS, REVIEW_STATUSES, filterCandidates, validateBatch } from './recruiterState'
+import { API_BASE_URL, addCandidateNote, addCandidateTag, apiRequest, deleteCandidateNote, editCandidateNote, removeCandidateTag } from './api'
+import { ANNOTATION_LIMITS, EMPTY_FILTERS, REVIEW_STATUSES, allTags, filterCandidates, updateCandidate, validateBatch, withNote, withTags, withoutNote } from './recruiterState'
 import RecruiterComparison from './RecruiterComparison'
+import CandidateAnnotations from './CandidateAnnotations'
 
 const STEPS = [
   { title: 'Create a job workspace', text: 'Add the job title and the job description every candidate will be compared against.' },
@@ -45,6 +46,12 @@ export default function RecruiterWorkspace({ token }) {
       return await apiRequest(`${API_BASE_URL}/api/workspaces${path}`, { ...options, signal: controller.signal,
         headers: { Authorization: `Bearer ${token}`, ...options.headers } })
     } finally { controllers.current.delete(controller) }
+  }
+  // Registers an abortable call so leaving the page cancels it, like request() above.
+  async function tracked(call) {
+    const controller = new AbortController()
+    controllers.current.add(controller)
+    try { return await call({ signal: controller.signal }) } finally { controllers.current.delete(controller) }
   }
   const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   async function list() { const data = await request(); if (alive.current) { setGroups(data.workspaces); setLimits(data.limits) } }
@@ -125,6 +132,23 @@ export default function RecruiterWorkspace({ token }) {
       setMessage('Manual review status saved. Evaluation scores are unchanged.')
     })
   }
+  function applyToCandidate(id, update) {
+    setGroup((value) => value && { ...value, candidates: updateCandidate(value.candidates, id, update) })
+    setRows((values) => updateCandidate(values, id, update))
+  }
+  async function annotate(action, done) {
+    let ok = false
+    await run(async () => { await action(); if (alive.current) { setMessage(done); ok = true } })
+    return ok
+  }
+  const annotationHandlers = {
+    onAddNote: (row, text) => annotate(async () => { const note = await tracked((o) => addCandidateNote(token, group.id, row.id, text, o)); applyToCandidate(row.id, (r) => withNote(r, note)) }, 'Note saved. Notes are private to your account and never sent to AI.'),
+    onEditNote: (row, noteId, text) => annotate(async () => { const note = await tracked((o) => editCandidateNote(token, group.id, row.id, noteId, text, o)); applyToCandidate(row.id, (r) => withNote(r, note)) }, 'Note updated.'),
+    onDeleteNote: (row, noteId) => annotate(async () => { await tracked((o) => deleteCandidateNote(token, group.id, row.id, noteId, o)); applyToCandidate(row.id, (r) => withoutNote(r, noteId)) }, 'Note deleted.'),
+    onAddTag: (row, tag) => annotate(async () => { const result = await tracked((o) => addCandidateTag(token, group.id, row.id, tag, o)); applyToCandidate(row.id, (r) => withTags(r, result.tags)) }, 'Tag saved.'),
+    onRemoveTag: (row, tag) => annotate(async () => { const result = await tracked((o) => removeCandidateTag(token, group.id, row.id, tag, o)); applyToCandidate(row.id, (r) => withTags(r, result.tags)) }, 'Tag removed.'),
+  }
+  const annotationLimits = { ...ANNOTATION_LIMITS, ...Object.fromEntries(Object.keys(ANNOTATION_LIMITS).filter((key) => Number.isFinite(limits[key])).map((key) => [key, limits[key]])) }
   const visible = filterCandidates(group?.candidates, filters)
   function filter(key, value) { setFilters((state) => ({ ...state, [key]: value })) }
   const candidates = group?.candidates || []
@@ -132,6 +156,7 @@ export default function RecruiterWorkspace({ token }) {
   const shortlisted = candidates.filter((row) => row.status === 'Shortlisted').length
   const filtersActive = Object.values(filters).some(Boolean)
   const advancedActive = Boolean(filters.source || filters.processing || filters.matched || filters.missing)
+  const tagOptions = allTags(group?.candidates)
   const progressPercent = progress ? Math.round(((progress.completed + progress.failed) / Math.max(progress.total, 1)) * 100) : 0
 
   const jobForm = (
@@ -193,7 +218,8 @@ export default function RecruiterWorkspace({ token }) {
         </div>}
 
         {candidates.length > 0 && <div className="recruiter-filters">
-          <label className="rw-field rw-search">Search candidates<input value={filters.search} placeholder="Name, skill, title or status" onChange={(e) => filter('search', e.target.value)} /></label>
+          <label className="rw-field rw-search">Search candidates<input value={filters.search} placeholder="Name, skill, tag, note or status" onChange={(e) => filter('search', e.target.value)} /></label>
+          <label className="rw-field">Tag filter<select value={filters.tag} disabled={!tagOptions.length} onChange={(e) => filter('tag', e.target.value)}><option value="">{tagOptions.length ? 'All tags' : 'No tags yet'}</option>{tagOptions.map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select></label>
           <label className="rw-field">Review filter<select value={filters.review} onChange={(e) => filter('review', e.target.value)}><option value="">All reviews</option>{REVIEW_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
           <label className="rw-field">Analysis filter<select value={filters.analysis} onChange={(e) => filter('analysis', e.target.value)}><option value="">All analyses</option>{['pending', 'completed', 'outdated'].map((value) => <option key={value}>{value}</option>)}</select></label>
           {moreFilters && <>
@@ -220,6 +246,8 @@ export default function RecruiterWorkspace({ token }) {
                 <p className="rw-candidate-name">{row.name || 'Name not found'}</p>
                 <p className="rw-hint">{row.filename}</p>
                 {(row.skills || []).length > 0 && <ul className="rw-skill-chips">{row.skills.slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}{row.skills.length > 6 && <li>+{row.skills.length - 6}</li>}</ul>}
+                {(row.tags || []).length > 0 && <ul className="rw-tag-chips rw-tag-chips-static" aria-label={`Tags for ${row.name || row.filename}`}>{row.tags.map((tag) => <li key={tag}>{tag}</li>)}</ul>}
+                {(row.notes || []).length > 0 && <p className="rw-hint">{row.notes.length} private note{row.notes.length === 1 ? '' : 's'}</p>}
               </td>
               <td>
                 {row.overall_score != null && <p className="rw-score">{row.overall_score}<small>/100</small></p>}
@@ -289,7 +317,8 @@ export default function RecruiterWorkspace({ token }) {
 
       {candidates.length ? <>{candidatesSection}{uploadSection}</> : <>{uploadSection}{candidatesSection}</>}
 
-      {rows.length > 0 && <RecruiterComparison rows={rows} busy={busy} onReview={review} />}
+      {rows.length > 0 && <RecruiterComparison rows={rows} busy={busy} onReview={review}
+        renderAnnotations={(row) => <CandidateAnnotations key={row.id} row={row} busy={busy} limits={annotationLimits} {...annotationHandlers} />} />}
 
       {jobForm}
 

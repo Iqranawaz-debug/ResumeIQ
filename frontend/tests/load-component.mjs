@@ -2,6 +2,7 @@
 // Relative imports are resolved recursively: .jsx files are compiled, .js
 // modules are imported from disk so tests share the same module instances.
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { transformWithOxc } from 'vite'
 
 const REACT = JSON.stringify(import.meta.resolve('react'))
@@ -14,7 +15,9 @@ async function moduleUrl(file) {
   const { code } = await transformWithOxc(source, file, { jsx: { runtime: 'classic' } })
   let output = code.replace(/(['"])react\1/g, REACT)
   for (const [, quote, target] of [...output.matchAll(/from\s+(['"])\.\/([\w.]+)\1/g)]) {
-    const url = await moduleUrl(/\.(jsx?|css)$/.test(target) ? target : `${target}.jsx`)
+    const resolved = /\.(jsx?|css)$/.test(target) ? target
+      : existsSync(new URL(`../src/${target}.jsx`, import.meta.url)) ? `${target}.jsx` : `${target}.js`
+    const url = await moduleUrl(resolved)
     output = output.replaceAll(`${quote}./${target}${quote}`, JSON.stringify(url))
   }
   const url = `data:text/javascript;base64,${Buffer.from(output).toString('base64')}`

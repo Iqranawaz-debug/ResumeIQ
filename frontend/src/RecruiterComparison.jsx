@@ -2,17 +2,19 @@ import React from 'react'
 import ExplainableResults from './ExplainableResults'
 import { REVIEW_STATUSES } from './recruiterState'
 
-export default function RecruiterComparison({ rows, busy, onReview }) {
+export default function RecruiterComparison({ rows, busy, onReview, renderAnnotations }) {
   return <div className="recruiter-comparison" aria-label="Candidate comparison">
     {(rows || []).map((row) => <article className="candidate-card" key={row.id} aria-label={`Candidate ${row.name || 'Name not found'}`}>
       <h3>{row.name || 'Name not found'}</h3>
       <p>{row.filename}</p>
+      {(row.tags || []).length > 0 && <ul className="rw-tag-chips rw-tag-chips-static" aria-label={`Tags for ${row.name || row.filename}`}>{row.tags.map((tag) => <li key={tag}>{tag}</li>)}</ul>}
       <label>Review status for {row.name || row.filename}
         <select value={row.status} disabled={busy} onChange={(event) => onReview(row, event.target.value)}>
           {REVIEW_STATUSES.map((status) => <option key={status}>{status}</option>)}
         </select>
       </label>
       <p>Status changes are human decisions and do not change scores.</p>
+      {renderAnnotations?.(row)}
       <p>Score source: {row.analysis?.job_fit_method || 'Not analyzed'}</p>
       {row.analysis ? <p>Overall: {row.analysis.overall_score} / 100 · Resume quality: {row.analysis.resume_quality_score} · Job fit: {row.analysis.job_fit_score ?? 'Unavailable'}</p> : <p>Analysis pending or outdated. Analyze against the current job description.</p>}
       <h4>Recognized skills</h4><p>{(row.candidate?.skills || []).join(', ') || 'Not evidenced in resume'}</p>

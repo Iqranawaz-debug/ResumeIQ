@@ -12,6 +12,7 @@ from evaluator.analyzer import analyze_resume_for_job
 from utils.candidate_processing import process_resume
 from utils.upload import read_upload
 from utils import limits
+from utils.text import clean_note, clean_tag, valid_tag
 
 MAX_FILES = 5
 BATCH_BYTES = 10 * 1024**2  # Existing request middleware remains at its lower configured cap.
@@ -54,6 +55,15 @@ class Comparison(StrictModel):
     version: int = Field(ge=1, strict=True)
 
 
+class NoteBody(StrictModel):
+    # Raw bound only; the cleaned text is checked against NOTE_CHARS.
+    text: str = Field(min_length=1, max_length=limits.NOTE_CHARS * 2)
+
+
+class TagBody(StrictModel):
+    tag: str = Field(min_length=1, max_length=limits.TAG_CHARS * 4)
+
+
 def now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -70,6 +80,31 @@ def candidate_for(group, candidate_id):
     if candidate is None:
         raise HTTPException(404, 'Candidate not found.')
     return candidate
+
+
+def note_text(value):
+    text = clean_note(value)
+    if not text:
+        raise HTTPException(422, 'Note text is required.')
+    if len(text) > limits.NOTE_CHARS:
+        raise HTTPException(422, f'Notes are limited to {limits.NOTE_CHARS} characters.')
+    return text
+
+
+def tag_text(value):
+    tag = clean_tag(value)
+    if not 1 <= len(tag) <= limits.TAG_CHARS:
+        raise HTTPException(422, f'Tags must be 1-{limits.TAG_CHARS} characters.')
+    if not valid_tag(tag):
+        raise HTTPException(422, "Tags may contain letters, numbers, spaces and + # . & ' - and must start with a letter or number.")
+    return tag
+
+
+def note_for(record, note_id):
+    note = next((n for n in record.setdefault('notes', []) if n['id'] == note_id), None)
+    if note is None:
+        raise HTTPException(404, 'Note not found.')
+    return note
 
 
 def current(group, version):
@@ -104,6 +139,9 @@ def summary(record, group):
         'score_source': analysis.get('job_fit_method') if analysis else None,
         'matched_skills': analysis.get('matched_skills', []) if analysis else [],
         'missing_skills': analysis.get('missing_skills', []) if analysis else [],
+        # Private reviewer annotations: owner-only, never part of record['candidate'] (the AI payload source).
+        'tags': list(record.get('tags') or []),
+        'notes': [dict(note) for note in record.get('notes') or []],
     }
 
 
@@ -135,7 +173,9 @@ def create_router(require_user, on_change=None):
     async def list_groups(user: str = Depends(require_user)):
         return {'workspaces': [group_summary(g) for g in workspaces.get(user, {}).values()],
                 'limits': {'files': MAX_FILES, 'batch_bytes': BATCH_BYTES, 'file_bytes': limits.RESUME_BYTES,
-                           'candidates': MAX_CANDIDATES, 'groups': MAX_GROUPS, 'compare': MAX_COMPARE}}
+                           'candidates': MAX_CANDIDATES, 'groups': MAX_GROUPS, 'compare': MAX_COMPARE,
+                           'note_chars': limits.NOTE_CHARS, 'notes': limits.NOTES_PER_CANDIDATE,
+                           'tags': limits.TAGS_PER_CANDIDATE, 'tag_chars': limits.TAG_CHARS}}
 
     @router.post('')
     async def create_group(body: Job, user: str = Depends(require_user)):
@@ -226,7 +266,7 @@ def create_router(require_user, on_change=None):
                     candidate = await run_in_threadpool(process_resume, filename, content)
                     record = {'id': secrets.token_urlsafe(16), 'filename': filename, 'digest': digest,
                               'candidate': candidate, 'status': 'Not Reviewed', 'revision': 0,
-                              'created_at': now(), 'audit': [], 'analysis': None}
+                              'created_at': now(), 'audit': [], 'analysis': None, 'notes': [], 'tags': []}
                     group['candidates'][record['id']] = record
                     outcome.update(state='completed', kind='success', candidate_id=record['id'], message='Extracted locally.')
                 except HTTPException as exc:
@@ -297,6 +337,66 @@ def create_router(require_user, on_change=None):
             group['updated_at'] = now()
             changed(user)
         return summary(record, group)
+
+    @router.post('/{group_id}/candidates/{candidate_id}/notes', status_code=201)
+    async def add_note(group_id: str, candidate_id: str, body: NoteBody, user: str = Depends(require_user)):
+        group = group_for(user, group_id)
+        record = candidate_for(group, candidate_id)
+        notes = record.setdefault('notes', [])
+        if len(notes) >= limits.NOTES_PER_CANDIDATE:
+            raise HTTPException(409, f'Note limit reached ({limits.NOTES_PER_CANDIDATE}). Delete a note first.')
+        note = {'id': secrets.token_urlsafe(12), 'text': note_text(body.text), 'created_at': now(), 'updated_at': None}
+        notes.append(note)
+        group['updated_at'] = now()
+        changed(user)
+        return dict(note)
+
+    @router.patch('/{group_id}/candidates/{candidate_id}/notes/{note_id}')
+    async def edit_note(group_id: str, candidate_id: str, note_id: str, body: NoteBody, user: str = Depends(require_user)):
+        group = group_for(user, group_id)
+        note = note_for(candidate_for(group, candidate_id), note_id)
+        note.update(text=note_text(body.text), updated_at=now())
+        group['updated_at'] = now()
+        changed(user)
+        return dict(note)
+
+    @router.delete('/{group_id}/candidates/{candidate_id}/notes/{note_id}')
+    async def delete_note(group_id: str, candidate_id: str, note_id: str, user: str = Depends(require_user)):
+        group = group_for(user, group_id)
+        record = candidate_for(group, candidate_id)
+        note = note_for(record, note_id)
+        record['notes'] = [n for n in record['notes'] if n is not note]
+        group['updated_at'] = now()
+        changed(user)
+        return {'message': 'Note deleted.'}
+
+    @router.post('/{group_id}/candidates/{candidate_id}/tags')
+    async def add_tag(group_id: str, candidate_id: str, body: TagBody, user: str = Depends(require_user)):
+        group = group_for(user, group_id)
+        record = candidate_for(group, candidate_id)
+        tags = record.setdefault('tags', [])
+        tag = tag_text(body.tag)
+        # Case-insensitive unique: re-adding an existing tag is a no-op that keeps its first spelling.
+        if tag.casefold() not in {t.casefold() for t in tags}:
+            if len(tags) >= limits.TAGS_PER_CANDIDATE:
+                raise HTTPException(409, f'Tag limit reached ({limits.TAGS_PER_CANDIDATE}). Remove a tag first.')
+            tags.append(tag)
+            group['updated_at'] = now()
+            changed(user)
+        return {'tags': list(tags)}
+
+    @router.delete('/{group_id}/candidates/{candidate_id}/tags/{tag}')
+    async def remove_tag(group_id: str, candidate_id: str, tag: str, user: str = Depends(require_user)):
+        group = group_for(user, group_id)
+        record = candidate_for(group, candidate_id)
+        tags = record.setdefault('tags', [])
+        key = clean_tag(tag).casefold()
+        if key not in {t.casefold() for t in tags}:
+            raise HTTPException(404, 'Tag not found.')
+        record['tags'] = [t for t in tags if t.casefold() != key]
+        group['updated_at'] = now()
+        changed(user)
+        return {'tags': list(record['tags'])}
 
     @router.post('/{group_id}/comparison')
     async def compare(group_id: str, body: Comparison, user: str = Depends(require_user)):
