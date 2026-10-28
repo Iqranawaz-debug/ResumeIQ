@@ -181,6 +181,17 @@ def extract_projects(lines, headers):
     return [entry for section in _sections(lines, headers, "projects") for entry in projects(section)]
 
 
+def extract_certifications(lines, headers):
+    """One entry per non-empty line of certification sections, verbatim minus bullets."""
+    entries = []
+    for section in _sections(lines, headers, "certifications"):
+        for line in section:
+            value = re.sub(r"^[\s•●▪*\-–]+", "", line).strip()
+            if value and len(value) <= 200 and value not in entries:
+                entries.append(value)
+    return entries[:20]
+
+
 def extract_candidate_info(text: str) -> dict:
     """Extract structured candidate info (name, email, phone, skills,
     education, experience) from plain resume text."""
@@ -197,6 +208,7 @@ def extract_candidate_info(text: str) -> dict:
         "education": extract_education(lines, headers),
         "experience": extract_experience(lines, headers),
         "projects": extract_projects(lines, headers),
+        "certifications": extract_certifications(lines, headers),
         "detected_sections": detected_sections,
     }
     candidate['skill_evidence'] = collect_skill_evidence(candidate, text, _sections(lines, headers, 'skills'))

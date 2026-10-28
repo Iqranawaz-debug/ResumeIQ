@@ -348,3 +348,15 @@
   .print-report .requirement-row,
   .print-report .finding { break-inside: avoid; }
 }
+
+/* Version comparison */
+.version-comparison { display: flex; flex-direction: column; gap: var(--space-3); }
+.version-table th[scope='row'] { text-align: left; font-weight: 500; color: var(--text-strong); }
+.version-table small { font-weight: 400; color: var(--text-dim); }
+.version-table .delta-up { color: var(--success); font-weight: 700; }
+.version-table .delta-down { color: var(--danger); font-weight: 700; }
+.version-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.version-comparison .requirement-row { grid-template-columns: 200px 1fr; }
+@media (max-width: 640px) {
+  .version-columns, .version-comparison .requirement-row { grid-template-columns: 1fr; }
+}

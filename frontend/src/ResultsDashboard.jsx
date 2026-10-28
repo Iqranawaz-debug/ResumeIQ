@@ -5,6 +5,7 @@ import ExplainableResults from './ExplainableResults'
 import ScoreImpact from './ScoreImpact'
 import ImprovementWorkspace from './ImprovementWorkspace'
 import DocumentChecks from './DocumentChecks'
+import VersionComparison from './VersionComparison'
 import { RESULT_TABS, weakFitCapApplies } from './resultsModel.js'
 
 const list = (value) => (Array.isArray(value) ? value : [])
@@ -38,7 +39,7 @@ function LocalComparison({ comparison }) {
 }
 
 export default function ResultsDashboard({ analysis, candidate, improvements, improvementDraft, improvementBusy,
-  improvementError, canGenerate, onGenerate, onAction, onDownload, initialTab = 'requirements' }) {
+  improvementError, canGenerate, onGenerate, onAction, onDownload, versions, initialTab = 'requirements' }) {
   const [tab, setTab] = useState(initialTab)
   const tabRefs = useRef({})
   const explanation = analysis.explanation || {}
@@ -100,6 +101,7 @@ export default function ResultsDashboard({ analysis, candidate, improvements, im
           {list(analysis.missing_sections).length > 0 && <p className="field-label">Missing from the resume: {analysis.missing_sections.join(', ')}</p>}
         </div>}
         {tab === 'document' && <DocumentChecks checks={candidate?.document_checks} />}
+        {tab === 'versions' && <VersionComparison versions={versions} />}
       </div>
     </div>
   )

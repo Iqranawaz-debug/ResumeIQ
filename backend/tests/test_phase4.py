@@ -241,7 +241,7 @@ class APICompatibilityTests(unittest.TestCase):
 
     def test_existing_routes_and_unauthenticated_access(self):
         paths = {r.path for r in self.api.app.routes if getattr(r, 'path', '').startswith('/api/')}
-        self.assertEqual({p for p in paths if not p.startswith('/api/workspaces')}, {'/api/signup', '/api/login', '/api/logout', '/api/upload', '/api/history', '/api/analyze', '/api/improvements', '/api/me/data'})
+        self.assertEqual({p for p in paths if not p.startswith('/api/workspaces')}, {'/api/signup', '/api/login', '/api/logout', '/api/upload', '/api/history', '/api/analyze', '/api/improvements', '/api/me/data', '/api/upload/sample', '/api/versions', '/api/health'})
         with patch.dict(self.auth.sessions, {}, clear=True):
             with self.assertRaises(HTTPException) as error:
                 self.api.require_user('Bearer invalid')
@@ -279,7 +279,7 @@ class APICompatibilityTests(unittest.TestCase):
             serialized = json.dumps(result)
             self.assertNotIn('Other private tool', serialized)
             self.assertEqual(result['history'][-1]['score'], 42)
-            self.assertEqual(set(result), {'analysis', 'history'})
+            self.assertEqual(set(result), {'analysis', 'history', 'versions', 'version_comparison'})
             with self.assertRaises(HTTPException) as error:
                 await api.analyze_resume('Python', 'second', None, 'one@example.invalid', use_ai=False)
             self.assertEqual(error.exception.status_code, 409)

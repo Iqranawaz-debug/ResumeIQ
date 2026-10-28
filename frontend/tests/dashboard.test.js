@@ -11,6 +11,7 @@ const { default: RequirementMatrix } = await loadComponent('RequirementMatrix')
 const { default: ScoreImpact } = await loadComponent('ScoreImpact')
 const { default: DocumentChecks } = await loadComponent('DocumentChecks')
 const { default: PrivacyPanel } = await loadComponent('PrivacyPanel')
+const { default: VersionComparison } = await loadComponent('VersionComparison')
 const html = (Component, props) => renderToStaticMarkup(React.createElement(Component, props))
 
 const lines = {
@@ -89,7 +90,7 @@ test('dashboard renders a summary and accessible tabs; panels switch by tab', ()
   const props = { analysis, candidate: { document_checks: null }, improvements: null, improvementDraft: null, canGenerate: true, onGenerate() {}, onAction() {}, onDownload() {} }
   const out = html(ResultsDashboard, props)
   assert.match(out, /role="tablist"/)
-  assert.equal((out.match(/role="tab"/g) || []).length, 5)
+  assert.equal((out.match(/role="tab"/g) || []).length, 6)
   assert.match(out, /aria-selected="true"[^>]*>Requirements/)
   assert.match(out, /5\+ years of Python/)
   assert.match(html(ResultsDashboard, { ...props, initialTab: 'improve' }), /What would change this score/)
@@ -104,4 +105,28 @@ test('privacy panel explains handling and offers deletion', () => {
   const out = html(PrivacyPanel, { token: 't', initialSummary: { resume_stored: true, analysis_stored: false, history_entries: 2, workspaces: 0, candidates: 0, retention_seconds: 7200, ai_provider_configured: false } })
   assert.match(out, /never kept/); assert.match(out, /2 entries/); assert.match(out, /2 hours of inactivity/)
   assert.match(out, /no AI provider is configured/); assert.match(out, /Delete my data now/)
+})
+
+const v = (id, extra) => ({ version_id: id, filename: id + '.pdf', jd_fingerprint: 'same', job_fit_method: 'rule-based', recommendation: 'Consider', overall_score: 60, resume_quality_score: 70, job_fit_score: 55, experience_years: 5, ...extra })
+
+test('version comparison shows score changes, skills and requirement changes', () => {
+  const versions = { list: [v('new', { overall_score: 68 }), v('old')], comparison: {
+    same_job: true, notes: ['Estimates only.'], deltas: { overall_score: 8, resume_quality_score: 0, job_fit_score: -3, experience_years: null },
+    skills_added: ['Kubernetes'], skills_removed: ['jQuery'], requirement_changes: [{ text: 'Kubernetes experience', from: 'not_evidenced', to: 'matched' }] } }
+  const out = html(VersionComparison, { versions })
+  for (const text of ['new.pdf', 'old.pdf', '+8', '-3', 'Kubernetes', 'jQuery', 'Not evidenced → Matched', 'Estimates only.']) assert.ok(out.includes(text), text)
+  assert.match(out, /delta-up/); assert.match(out, /delta-down/)
+})
+
+test('version comparison warns about different job descriptions and explains how to start', () => {
+  const versions = { list: [v('new'), v('old')], comparison: { same_job: false, notes: ['These versions were evaluated against different job descriptions (or none), so the scores are not directly comparable.'], deltas: {}, skills_added: [], skills_removed: [], requirement_changes: [] } }
+  const out = html(VersionComparison, { versions })
+  assert.match(out, /banner-warning/); assert.match(out, /only compared for the same job description/)
+  assert.match(html(VersionComparison, { versions: { list: [v('only')], comparison: null } }), /Evaluate Another Resume/)
+})
+
+test('privacy panel reflects database storage', () => {
+  const out = html(PrivacyPanel, { token: 't', initialSummary: { resume_stored: false, history_entries: 0, versions: 2, workspaces: 0, candidates: 0, retention_seconds: 3600, storage: 'database', ai_provider_configured: true } })
+  assert.match(out, /saved in this server&#x27;s database/); assert.match(out, /snapshots.*: 2/)
+  assert.ok(!out.includes('no AI provider is configured'))
 })

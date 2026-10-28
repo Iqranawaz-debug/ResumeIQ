@@ -146,4 +146,4 @@ class SkillExtractionTests(unittest.TestCase):
         self.assertEqual(result['email'], 'candidate@example.invalid')
         self.assertEqual(result['education'], ['Synthetic University 2020'])
         self.assertEqual(result['experience'][0]['duration'], '2020-2023')
-        self.assertEqual(set(result), {'name', 'email', 'phone', 'skills', 'education', 'experience', 'projects', 'detected_sections', 'skill_evidence'})
+        self.assertEqual(set(result), {'name', 'email', 'phone', 'skills', 'education', 'experience', 'projects', 'certifications', 'detected_sections', 'skill_evidence'})

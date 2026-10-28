@@ -13,6 +13,7 @@ import './dashboard.css'
 import { API_BASE_URL, apiRequest, analysisForm } from './api'
 
 const UPLOAD_URL = `${API_BASE_URL}/api/upload`
+const SAMPLE_URL = `${API_BASE_URL}/api/upload/sample`
 const ANALYZE_URL = `${API_BASE_URL}/api/analyze`
 const HISTORY_URL = `${API_BASE_URL}/api/history`
 const LOGOUT_URL = `${API_BASE_URL}/api/logout`
@@ -77,6 +78,7 @@ function App() {
   const uploadRequest = useRef(null)
   const analysisRequest = useRef(null)
   const [resumeId, setResumeId] = useState(null)
+  const [versions, setVersions] = useState({ list: [], comparison: null })
   const [processingNote, setProcessingNote] = useState('')
   const [historyError, setHistoryError] = useState('')
   const inputRef = useRef(null)
@@ -179,6 +181,7 @@ function App() {
     setAnalysis(null)
     setAnalysisStatus('idle')
     setHistory([])
+    setVersions({ list: [], comparison: null })
     setJobDescription('')
     setJdFile(null)
     setUploadedFile(null)
@@ -190,32 +193,44 @@ function App() {
   }
 
   async function uploadFile(file) {
+    const clientError = validateFile(file)
+    if (clientError) {
+      uploadRequest.current?.abort()
+      setUploadStatus('error')
+      setUploadMessage(clientError)
+      return
+    }
+    const formData = new FormData()
+    formData.append('file', file)
+    await submitUpload(UPLOAD_URL, formData, file)
+  }
+
+  // The bundled fictional sample goes through the same local pipeline as a real upload.
+  async function uploadSample() {
+    const data = await submitUpload(SAMPLE_URL, undefined, null)
+    if (data?.sample_job_description) {
+      setJdInputMode('text')
+      setJdFile(null)
+      setJobDescription(data.sample_job_description)
+    }
+  }
+
+  async function submitUpload(url, body, file) {
     uploadRequest.current?.abort()
     analysisRequest.current?.abort()
     const controller = new AbortController()
     uploadRequest.current = controller
     setAnalysisStatus('idle')
-    const clientError = validateFile(file)
-    if (clientError) {
-      setUploadStatus('error')
-      setUploadMessage(clientError)
-      return
-    }
-
     setUploadStatus('uploading')
     setUploadMessage('')
-
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
-      const data = await apiRequest(UPLOAD_URL, {
+      const data = await apiRequest(url, {
         signal: controller.signal,
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+        body,
       })
-      if (controller.signal.aborted || uploadRequest.current !== controller) return
+      if (controller.signal.aborted || uploadRequest.current !== controller) return null
       clearImprovements()
       setAnalysis(null)
       setResumeId(data.resume_id)
@@ -225,10 +240,12 @@ function App() {
       setFileName(data.filename)
       setCandidate(data.candidate || null)
       setUploadedFile(file)
+      return data
     } catch (err) {
-      if (controller.signal.aborted || uploadRequest.current !== controller) return
+      if (controller.signal.aborted || uploadRequest.current !== controller) return null
       setUploadStatus('error')
       setUploadMessage(err.message || 'Could not reach the server.')
+      return null
     }
   }
 
@@ -256,6 +273,7 @@ function App() {
       setAnalysisStatus('success')
       setAnalysis(data.analysis)
       setHistory(data.history || [])
+      setVersions({ list: data.versions || [], comparison: data.version_comparison || null })
       setCurrentStep(4)
     } catch (err) {
       if (controller.signal.aborted || analysisRequest.current !== controller) return
@@ -365,7 +383,9 @@ function App() {
     if (file) uploadFile(file)
   }
 
-  function handleStartOver() {
+  // The job description is kept so a revised resume (or another candidate) can be
+  // evaluated against the same role and compared under Versions.
+  function handleStartOver({ keepJob = true } = {}) {
     clearImprovements()
     uploadRequest.current?.abort()
     analysisRequest.current?.abort()
@@ -377,8 +397,10 @@ function App() {
     setFileName('')
     setCandidate(null)
     setUploadedFile(null)
-    setJobDescription('')
-    setJdFile(null)
+    if (!keepJob) {
+      setJobDescription('')
+      setJdFile(null)
+    }
     setAnalysis(null)
     setAnalysisStatus('idle')
     setAnalysisMessage('')
@@ -484,9 +506,12 @@ function App() {
                 )}
                 {uploadStatus === 'error' && <p className="status error">{uploadMessage}</p>}
 
-                <p className="wizard-note">The file itself is not kept. Extracted details and results stay in server memory and are erased after a period of inactivity, on restart, or when you delete them under Privacy &amp; data.</p>
+                <p className="wizard-note">The file itself is never kept. Extracted details and results are kept only as described under Privacy &amp; data, where you can delete them at any time.</p>
 
                 <div className="wizard-actions">
+                  <button type="button" className="link-button" disabled={uploadStatus === 'uploading'} onClick={uploadSample}>
+                    No resume handy? Try a fictional sample
+                  </button>
                   <button
                     type="button"
                     className="evaluate-button"
@@ -588,6 +613,10 @@ function App() {
                         </li>
                       ))}
                     </ul>
+                  ) : <p className="not-found">Not found</p>}
+                  <p className="field-label"><strong>Certifications</strong></p>
+                  {(candidate.certifications || []).length > 0 ? (
+                    <ul>{candidate.certifications.map((item) => <li key={item}>{item}</li>)}</ul>
                   ) : <p className="not-found">Not found</p>}
                 </div>
 
@@ -707,13 +736,13 @@ function App() {
                   improvementBusy={improvementBusy} improvementError={improvementError}
                   canGenerate={Boolean(resumeId && analysis.analysis_id)} onGenerate={generateImprovements}
                   onAction={(action) => setImprovementDraft((draft) => updateDraft(improvements, draft, action))}
-                  onDownload={handleDownloadRecommendation} />
+                  onDownload={handleDownloadRecommendation} versions={versions} />
 
                 <div className="wizard-actions">
                   <button type="button" className="link-button" onClick={() => setCurrentStep(3)}>
                     Back
                   </button>
-                  <button type="button" className="evaluate-button" onClick={handleStartOver}>
+                  <button type="button" className="evaluate-button" onClick={() => handleStartOver()}>
                     Evaluate Another Resume
                   </button>
                 </div>
@@ -727,7 +756,7 @@ function App() {
             <p className="eyebrow">/ PRIVACY</p>
             <h1>Privacy &amp; data</h1>
             <p className="subtitle">Exactly what is held for your account, and a way to erase it.</p>
-            <PrivacyPanel key={token} token={token} onDeleted={() => { handleStartOver(); setHistory([]) }} />
+            <PrivacyPanel key={token} token={token} onDeleted={() => { handleStartOver({ keepJob: false }); setHistory([]); setVersions({ list: [], comparison: null }) }} />
           </div>
         )}
 

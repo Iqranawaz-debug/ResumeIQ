@@ -34,6 +34,7 @@ export const RESULT_TABS = [
   { id: 'improve', label: 'Improve' },
   { id: 'interview', label: 'Interview prep' },
   { id: 'document', label: 'Document' },
+  { id: 'versions', label: 'Versions' },
 ]
 
 const list = (value) => (Array.isArray(value) ? value : [])

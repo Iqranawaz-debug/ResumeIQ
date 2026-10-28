@@ -41,8 +41,11 @@ export default function PrivacyPanel({ token, onDeleted, initialSummary = null }
           <li>Uploaded files are parsed and discarded; the file itself is never kept.</li>
           <li>Extracted resume details: {summary.resume_stored ? 'stored' : 'none stored'}{summary.analysis_stored ? ', with an analysis' : ''}.</li>
           <li>Evaluation history: {summary.history_entries} entr{summary.history_entries === 1 ? 'y' : 'ies'}.</li>
+          <li>Resume version snapshots (scores, skills and requirement statuses only): {summary.versions ?? 0}.</li>
           <li>Recruiter workspaces: {summary.workspaces} ({summary.candidates} candidate{summary.candidates === 1 ? '' : 's'}).</li>
-          <li>Everything above is held in server memory only and is erased after {retentionText(summary.retention_seconds)} of inactivity or when the server restarts.</li>
+          <li>{summary.storage === 'database'
+            ? `Everything above is saved in this server's database so it survives restarts, and is erased after ${retentionText(summary.retention_seconds)} without changes.`
+            : `Everything above is held in server memory only and is erased after ${retentionText(summary.retention_seconds)} of inactivity or when the server restarts.`}</li>
         </ul>
       ) : !error && <p role="status">Loading…</p>}
       <h2>When AI is used</h2>

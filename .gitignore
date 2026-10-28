@@ -40,3 +40,10 @@ Thumbs.db
 reviewer/
 reviewer/
 reviewer/
+
+# Example environment file is documentation, not a secret.
+!.env.example
+
+# Local SQLite data (RESUMEIQ_DB_PATH)
+*.db
+*.db-journal

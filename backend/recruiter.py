@@ -123,8 +123,13 @@ def group_summary(group):
     return {k: group[k] for k in ('id', 'title', 'version', 'created_at', 'updated_at')} | {'candidate_count': len(group['candidates'])}
 
 
-def create_router(require_user):
+def create_router(require_user, on_change=None):
     router = APIRouter(prefix='/api/workspaces', dependencies=[Depends(require_user)])
+
+    def changed(user):
+        # Persistence hook (no-op unless storage is enabled).
+        if on_change:
+            on_change(user)
 
     @router.get('')
     async def list_groups(user: str = Depends(require_user)):
@@ -144,6 +149,7 @@ def create_router(require_user):
         group = {'id': secrets.token_urlsafe(16), 'title': body.title.strip(), 'description': body.description.strip(),
                  'version': 1, 'created_at': now(), 'updated_at': now(), 'candidates': {}, 'batches': []}
         groups[group['id']] = group
+        changed(user)
         return group_summary(group)
 
     @router.get('/{group_id}')
@@ -164,6 +170,7 @@ def create_router(require_user):
                 record['analysis'] = None  # Never serve old scores as current comparisons.
                 record['analysis_error'] = None
         group.update(title=body.title.strip(), description=body.description.strip(), updated_at=now())
+        changed(user)
         return group_summary(group)
 
     @router.delete('/{group_id}')
@@ -174,6 +181,7 @@ def create_router(require_user):
         del workspaces[user][group_id]
         if not workspaces[user]:
             del workspaces[user]
+        changed(user)
         return {'message': 'Workspace removed.'}
 
     @router.post('/{group_id}/uploads')
@@ -231,6 +239,7 @@ def create_router(require_user):
             group['batches'].insert(0, batch)
             del group['batches'][MAX_BATCHES:]
             group['updated_at'] = now()
+            changed(user)
             return batch
 
     @router.get('/{group_id}/candidates/{candidate_id}')
@@ -248,6 +257,7 @@ def create_router(require_user):
             raise HTTPException(409, 'Wait for processing before removing a candidate.')
         del group['candidates'][candidate_id]
         group['updated_at'] = now()
+        changed(user)
         return {'message': 'Candidate removed.'}
 
     @router.post('/{group_id}/candidates/{candidate_id}/analyze')
@@ -272,6 +282,7 @@ def create_router(require_user):
             finally:
                 record['processing_status'] = 'completed'
                 group['updated_at'] = now()
+                changed(user)
 
     @router.patch('/{group_id}/candidates/{candidate_id}/review')
     async def review_candidate(group_id: str, candidate_id: str, body: Review, user: str = Depends(require_user)):
@@ -284,6 +295,7 @@ def create_router(require_user):
             del record['audit'][:-10]
             record.update(status=body.status, revision=record['revision'] + 1)
             group['updated_at'] = now()
+            changed(user)
         return summary(record, group)
 
     @router.post('/{group_id}/comparison')

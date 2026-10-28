@@ -70,6 +70,17 @@ def _lines(text):
                 yield context, part
 
 
+CERT_STOPWORDS = {'certification', 'certifications', 'certified', 'certificate', 'certificates', 'license', 'licence',
+                  'licensed', 'licenses', 'licences', 'or', 'and', 'a', 'an', 'the', 'in', 'of', 'is', 'are', 'preferred',
+                  'required', 'must', 'have', 'equivalent', 'relevant', 'industry', 'professional', 'such', 'as', 'e.g',
+                  'plus', 'with', 'current', 'valid', 'active', 'similar', 'any', 'one', 'related', 'nice', 'to', 'be'}
+
+
+def _cert_tokens(text):
+    # Distinctive words such as "aws", "pmp", "cissp", "security+"; generic certification words are ignored.
+    return {w for w in re.findall(r"[a-z0-9][a-z0-9+#.-]*", text.casefold()) if w.strip('.') not in CERT_STOPWORDS and len(w) >= 2}
+
+
 def _words(text):
     return {w for w in re.findall(r"[a-z][a-z+#.-]{3,}", text.casefold()) if w not in STOPWORDS}
 
@@ -112,9 +123,19 @@ def _skills_row(context, text, kind, candidate, skills, held):
 def _assess(context, text, candidate, held, years, uncertain_dates):
     skills = matching_skills(text, candidate.get('skills') or [])
     if re.search(r'\b(?:certif\w*|licen[cs]\w*)\b', text, re.I):
+        certifications = candidate.get('certifications') or []
+        wanted = _cert_tokens(text)
+        found = [c for c in certifications if wanted and wanted & _cert_tokens(c)]
+        if found:
+            evidence = [{'section': 'certifications', 'entry_index': None, 'excerpt': c} for c in found[:2] if safe_excerpt(c, candidate)]
+            return _row(context, text, 'certification', 'matched', 'explicit',
+                        f"Listed certification: {'; '.join(found[:2])}. Validity and expiry are not verified.", evidence, skills)
+        if certifications:
+            return _row(context, text, 'certification', 'not_evidenced', 'none',
+                        f"{len(certifications)} certification(s) listed, but none mention this requirement.", (), skills)
         if 'certifications' in (candidate.get('detected_sections') or []):
             return _row(context, text, 'certification', 'unclear', 'none',
-                        'A certifications section exists, but its contents are not extracted. Review it manually.', (), skills)
+                        'A certifications heading exists, but no entries could be read under it. Review it manually.', (), skills)
         if skills and all(s in held for s in skills):
             return _row(context, text, 'certification', 'partial', 'inference',
                         f"Related skill listed ({_names(skills)}), but no certification was found.", (), skills)

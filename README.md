@@ -1,74 +1,46 @@
 # ResumeIQ
 
-ResumeIQ is a recruiter-oriented resume review prototype built with React and FastAPI. Its workflow uploads a resume, displays extracted information, optionally accepts a job description, and presents an indicative evaluation. Scores are heuristics, not official ATS scores or verified hiring probabilities.
+ResumeIQ is an explainable resume evaluation tool built with React and FastAPI. Upload a resume, optionally add a job description, and get an evidence-based review: requirement-by-requirement matching with source quotes, a transparent score breakdown, honest improvement suggestions, interview preparation, and document readability checks.
 
-## Existing functionality
+Scores are indicative heuristics, not official ATS scores or hiring probabilities. Every view separates **evidence found in the resume** from **inference**, and AI is always optional.
 
-- Local account signup, login, and logout; no Supabase integration.
-- PDF/DOCX resume upload with a 10 MB application limit.
-- Rule-based extraction of contact information, skills, education, and experience.
-- Local skill categorization and optional AI job matching, with a local fallback.
-- Job descriptions supplied as text or PDF/DOCX/TXT files.
-- Resume-only scoring, matched/missing skills, suggestions, and interview questions.
-- Five recent evaluation summaries per user in process memory; name search.
-- Light/dark themes, TXT report download, and browser print/save-as-PDF.
-- Conservative local resume wording suggestions, editable comparisons, and an interactive improvement checklist with TXT/print export.
+## Highlights
 
-Extracted information remains read-only. Improvement drafts are editable in the active session and never change the original candidate or score. OCR, durable analysis history, password recovery, email verification, team authorization, and batch uploads are not implemented.
+- **Requirement review**: each job-description requirement is marked *Matched*, *Partial*, *Not evidenced* or *Can't assess*, with a reason, an evidence/inference label and a short quote from the resume. Company and benefits text is ignored. Display-only: it never changes the score.
+- **Explainable scoring**: the exact formula, component points and weights; preferred-only skills count half; a weak-fit cap stops a polished resume from rescuing the wrong role.
+- **What would change this score**: re-runs the same scoring rules on hypothetical edits ("Show your Kubernetes experience: +12 job fit"), always conditional on being true.
+- **Improvement assistant**: flags weak openings, passive voice, missing outcomes and long bullets. Optional AI rewrites are kept only if a grounding validator confirms they add no new numbers, tools, names, responsibility level or content; bracketed placeholders must be replaced before a draft can be accepted.
+- **Document readability**: image-only PDF pages, contact details hidden in DOCX headers/footers, text boxes, tables, icon-font glyphs, out-of-order text, unrecognized headings and unreadable dates, each with a fix. Worded as possible risks, never as ATS guarantees.
+- **Reliable AI**: the AI job-fit score (when requested) stays the main score with the local score always shown beside it; AI-matched skills are labelled *found in resume* or *inferred*; malformed output is retried once; any fallback is shown in a banner.
+- **Resume versions**: analyze a revised resume against the same job and compare scores, skills added/removed and requirement status changes.
+- **Recruiter workspace**: per-job workspaces, batch upload of up to 5 resumes, review statuses with an audit trail, and side-by-side comparison with no automatic ranking.
+- **Privacy controls**: a Privacy & data page shows exactly what is stored and what AI calls send, with one-click deletion and automatic expiry of inactive data.
+- **One-click demo**: "Try a fictional sample" loads a bundled sample resume and job description through the real pipeline.
+- Light/dark themes, keyboard-accessible tabs, responsive layout, TXT summary and print/PDF report.
 
-## Stack and runtime requirements
+## Quick start
 
-Frontend: React 19, Vite 8, plain CSS, Oxlint. Backend: FastAPI, Uvicorn, python-multipart, python-docx, pypdf, and the OpenAI SDK configured for OpenRouter. Tests use standard-library unittest; no extra test framework.
+### Docker (production-like)
 
-Verified on Windows with Python **3.14.3**, Node **24.21.0**, and npm **11.19.0**. Locked frontend tools require Node `^20.19.0 || >=22.12.0`. Backend source uses Python 3.10+ syntax; other Python/platform combinations have not been verified. Use the tested version for this baseline.
-
-`frontend/package-lock.json` is the existing npm lockfile. `backend/requirements.txt` remains unpinned. The new `backend/constraints-baseline.txt` records exact versions resolved from that manifest in the isolated Windows/Python 3.14 environment. It is a version snapshot, not a hash-verified or cross-platform lockfile. Platform-specific dependencies elsewhere may differ. Pydantic is imported directly but currently supplied transitively by FastAPI/OpenAI; its tested version is captured in the constraints.
-
-## Structure
-
-```text
-backend/
-  main.py                     API setup and routes
-  auth/                       Local accounts and sessions
-  parser/                     PDF/DOCX/text parsing
-  extractor/                  Rule-based candidate extraction
-  evaluator/                  Scoring and recommendations
-  matcher/                    Local job matching
-  ai/                         OpenRouter adapters and schemas
-  utils/                      Validation and skill vocabulary
-  tests/                      Synthetic baseline/known-defect tests
-  requirements.txt
-  constraints-baseline.txt
-frontend/
-  src/                        App, auth, report, branding, themes, CSS
-  public/                     Static assets
-  package.json
-  package-lock.json
-  vite.config.js
-docs/                         Baseline verification report
+```powershell
+copy .env.example .env
+docker compose up --build
 ```
 
-`backend/data/users.json` is created when accounts are saved and is ignored by Git. It is not a test fixture. Do not commit real resumes or account records.
+Open `http://localhost:8080` (API on `http://localhost:8000`, health at `/api/health`). Compose enables SQLite persistence in a named volume. The Docker files have not been built in the verification environment for this release; see [Known limitations](#known-limitations).
 
-## Installation and startup
+### Local development
 
-PowerShell commands below start at the repository root. No API key is required for local processing.
-
-### Backend
+Verified on Windows with Python **3.14.3**, Node **24.21.0** and npm **11.19.0**. Commands start at the repository root.
 
 ```powershell
 python -m venv backend/.venv
 backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt -c backend/constraints-baseline.txt
-backend/.venv/Scripts/python.exe -m pip check
 cd backend
 .venv/Scripts/python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-API: `http://localhost:8000`; interactive API docs: `http://localhost:8000/docs`. Run Uvicorn from `backend/` because imports use that root. On macOS/Linux, use `python3` to create the environment and `.venv/bin/python` instead of `.venv/Scripts/python.exe`; those platforms are unverified in this baseline.
-
-### Frontend
-
-In another terminal, from the repository root:
+In a second terminal:
 
 ```powershell
 cd frontend
@@ -76,84 +48,98 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-Open `http://localhost:5173`, the default allowed origin. `npm ci` installs the existing lockfile without a dependency update.
+Open `http://localhost:5173`, create a local account, then choose **Try a fictional sample** to see every feature without your own resume. No API key is needed; AI features stay off until a key is configured and you opt in.
 
 ## Configuration
 
-| Variable | Location | Default / purpose |
-| --- | --- | --- |
-| `VITE_API_BASE_URL` | Frontend environment or `frontend/.env.local` | `http://localhost:8000`; omit trailing slash |
-| `ALLOWED_ORIGINS` | Backend process environment | `http://localhost:5173`; comma-separated browser origins |
-| `OPENROUTER_API_KEY` | Backend process environment only | Optional secret; absence triggers local fallback |
-| `OPENROUTER_MODEL` | Backend process environment | Code default `openai/gpt-oss-20b:free`; availability/pricing not verified |
+All values are optional. See [.env.example](.env.example).
 
-No Supabase variables are consumed. Backend code does not automatically load `.env`; set process variables before startup or explicitly use Uvicorn's `--env-file` with a private ignored file. Never put secrets in `VITE_*` values: they become public browser configuration. Restart/rebuild after changing configuration.
+| Variable | Default / purpose |
+| --- | --- |
+| `OPENROUTER_API_KEY` | Enables opt-in AI job matching and AI wording suggestions. Backend only; never put secrets in `VITE_*` values. |
+| `OPENROUTER_MODEL` | `openai/gpt-oss-20b:free` |
+| `ALLOWED_ORIGINS` | `http://localhost:5173`; comma-separated, exact scheme/host/port |
+| `RESUMEIQ_DB_PATH` | Empty = working data in memory only. Set a file path to persist it in SQLite. |
+| `DATA_RETENTION_SECONDS` | `7200`; inactive users' working data is erased after this period |
+| `SESSION_TTL_SECONDS` | `3600` |
+| `VITE_API_BASE_URL` | Frontend build setting; `http://localhost:8000` |
+| `MAX_RESUME_BYTES`, `MAX_JD_BYTES`, `MAX_TEXT_CHARS`, `MAX_PDF_PAGES`, ... | Resource limits (see `backend/utils/limits.py`) |
 
-CORS must match scheme, host, and port exactly. Browsing at `127.0.0.1` instead of `localhost` needs a matching allowed origin. Vite preview normally uses port 4173, which also needs explicit CORS configuration. No Vite API proxy is configured.
+The backend does not load `.env` by itself; Docker Compose passes it, or use Uvicorn's `--env-file`.
 
-## Authentication, storage, and AI processing
+## Privacy and data handling
 
-Accounts use local salted PBKDF2 password hashes plus optional profile metadata in `backend/data/users.json`. Writes are atomic (temp file + replace); a corrupt file stops startup instead of being treated as empty. Sessions are opaque tokens held in backend memory and stored in browser localStorage. No external identity provider is used. Restarting the backend invalidates sessions and loses resumes/history.
+- Uploaded files are parsed and discarded. Extracted fields, analyses, history, version snapshots (scores, skills and requirement statuses only) and workspaces are kept in memory, or in SQLite when `RESUMEIQ_DB_PATH` is set.
+- Working data is erased after `DATA_RETENTION_SECONDS` of inactivity, on request (`DELETE /api/me/data` or the Privacy page), and on restart when persistence is off.
+- Accounts are stored locally in `backend/data/users.json` with salted PBKDF2 hashes; writes are atomic and a corrupt file stops startup rather than wiping accounts. Sessions are in memory, so a restart requires signing in again.
+- AI is used only when the user ticks an AI option. Job matching sends skills, education and employment titles/dates/descriptions with best-effort contact redaction, plus the job description. Wording suggestions send only flagged employment bullets containing no names, organizations, contact details or sensitive attributes. Projects, evidence quotations and files are never sent. Redaction is best effort, not anonymization.
 
-Resume bytes and full parsed text are processed transiently and are not kept in the validated-resume store. Extracted candidates, bounded evidence quotations and evaluation results remain in process memory until replacement or process exit. Logout removes a token but does **not** erase stored resumes/history. There is no retention timer or deletion endpoint.
+## Architecture
 
-Uploads extract and categorize skills locally. AI job matching is opt-in per analysis (`use_ai=true`, the "Use AI job matching" checkbox); with an OpenRouter key configured and the option selected, JD matching sends only skills, education and employment title/duration/details, with best-effort contact redaction, plus the JD. Organizations, projects and evidence quotations are excluded from the provider payload. Exceptions fall back locally. The AI extraction module is unused. Redaction is not guaranteed anonymization.
+```text
+backend/
+  main.py              API routes, retention, persistence wiring
+  recruiter.py         Recruiter workspaces router
+  samples.py           Bundled fictional demo resume and job description
+  auth/                Local accounts and sessions
+  parser/              PDF/DOCX/text parsing with layout stats
+  extractor/           Rule-based extraction (contact, skills, experience, projects, certifications, evidence)
+  matcher/             Local job matching and requirement-line review
+  evaluator/           Scoring, explanation, score impacts, document checks, improvements, versions
+  ai/                  OpenRouter adapters: job matching, grounded rewrites, privacy filtering
+  utils/               Limits, upload validation, skills vocabulary, SQLite persistence
+  tests/               Synthetic unittest suites (no network, no real data)
+  Dockerfile
+frontend/
+  src/                 App shell, results dashboard and components, recruiter workspace, styles
+  tests/               node:test component and state tests; Playwright browser QA script
+  Dockerfile, nginx.conf
+docker-compose.yml, .env.example, .github/workflows/ci.yml
+docs/                  Phase reports and verification notes
+```
 
-Phase 4 adds local score explanations, alias matching, requirement context and short source quotations. The existing AI-first score selection is preserved; its unverifiable judgments are labelled separately from local evidence checks. See [Phase 4 implementation and verification](docs/phase4-explainable-matching.md) for exact formulas, privacy limits, tests and known issues.
-
-Phase 5 generates local advice after analysis. Optional AI wording suggestions send only flagged employment bullets (no names, organizations, contact details or sensitive attributes); each rewrite is kept only if it adds no new numbers, tools, names, responsibility level or content words, and may contain `[placeholders]` that must be replaced before acceptance. Cached results avoid regenerating advice for the same evaluation.
-
-Product upgrade: results are a tabbed dashboard (Requirements, Score breakdown, Improve, Interview prep, Document). Requirement-by-requirement review and document readability checks are display-only and never change scores. "What would change this score" re-runs the existing local rules on hypothetical edits. When AI job matching is used, its score stays the main score and the local rules score is always shown beside it; AI-matched skills are labelled explicit or inferred, invalid AI output is retried once, and fallbacks are shown in a banner. Inactive users' data expires after `DATA_RETENTION_SECONDS` (default 7200). Manual edits require review. Drafts reset on upload, analysis, logout, start-over or reload. See [Phase 5 implementation and verification](docs/phase5-resume-improvement.md).
+Business logic lives in the backend; the frontend renders backend results without recomputing scores (`resultsModel.js` holds only presentation helpers).
 
 ## API
 
 | Method/path | Behavior |
 | --- | --- |
-| `POST /api/signup` | JSON email/password, optional full_name/company; returns token |
-| `POST /api/login` | JSON email/password; returns token |
-| `POST /api/logout` | Invalidates supplied bearer token |
-| `POST /api/upload` | Authenticated multipart `file`; stores latest resume |
-| `GET /api/history` | Authenticated; up to five summary entries |
-| `POST /api/analyze` | Authenticated; current `resume_id`, optional form `job_description` or multipart `file`, optional `use_ai=false`; returns additive `analysis.analysis_id` |
-| `POST /api/improvements` | Authenticated form `resume_id`, `analysis_id`, optional `use_ai=false`; returns cached draft advice (AI wording suggestions only when `use_ai=true`, each grounding-checked) without rescoring |
-| `GET /api/me/data` | Authenticated; counts of what is stored for the account, retention period, whether an AI provider is configured |
-| `DELETE /api/me/data` | Authenticated; erases extracted resume data, analyses, history and recruiter workspaces (account remains) |
+| `POST /api/signup`, `/api/login`, `/api/logout` | Local accounts; bearer tokens |
+| `POST /api/upload` | Multipart `file` (PDF/DOCX); extraction, categorization and readability checks |
+| `POST /api/upload/sample` | Loads the bundled fictional resume; returns a sample job description |
+| `POST /api/analyze` | `resume_id`, optional `job_description` text or `file`, optional `use_ai`; returns analysis, history, versions and version comparison |
+| `POST /api/improvements` | `resume_id`, `analysis_id`, optional `use_ai` for grounded AI wording suggestions; cached, never rescoring |
+| `GET /api/history`, `GET /api/versions` | Recent evaluations; version snapshots and comparison |
+| `GET /api/me/data`, `DELETE /api/me/data` | What is stored for the account; erase it |
+| `GET /api/health` | Liveness and storage mode (no user data) |
+| `/api/workspaces/...` | Recruiter workspaces, batch uploads, review statuses, comparison |
 
-Protected requests use `Authorization: Bearer <token>`. Analyze checks the submitted ID against the latest stored resume for the user. Improvements also require the current analysis ID; stale requests return 409. Responses include extraction/categorization or job-fit method/model metadata; the UI does not display all of it.
+Interactive docs: `http://localhost:8000/docs`. Stale `resume_id`/`analysis_id`/workspace versions return 409.
 
 ## Tests and validation
 
-From `backend/`:
-
 ```powershell
-.venv/Scripts/python.exe -m unittest discover -s tests -v
+cd backend
+.venv/Scripts/python.exe -m unittest discover -s tests
 .venv/Scripts/python.exe -m pip check
 ```
 
-Tests use synthetic data and in-memory PDF/DOCX fixtures. AI calls are mocked; no credentials are needed. Account storage is isolated and tests do not modify user data. The current backend suite passes 254 tests without expected failures. Phase 5 adds 28 tests in `test_improvements.py`. Security and network-guard suites preserve the Windows asyncio isolation fixes.
-
-From `frontend/`:
-
 ```powershell
+cd frontend
 node --test tests/*.test.js
 npm run lint
 npm run build
-npm run preview
 ```
 
-The frontend suite has 44 tests, including draft state, component rendering, event callbacks and exports. Build output goes to ignored `frontend/dist/`. Preview is for local validation, not production hosting. See [Phase 1 verification](docs/phase-1-baseline.md) for historical dependency findings and the Phase 5 report for current verification.
+Current results: **270 backend tests** and **47 frontend tests** pass; lint, build and `pip check` are clean. Tests use synthetic data, mock every AI call and block network access. GitHub Actions runs both suites on pushes and pull requests (`.github/workflows/ci.yml`). `frontend/tests/browser-qa.mjs` is a Playwright scenario script that needs Playwright installed separately.
 
-## Current limitations
+## Known limitations
 
-- Extraction remains heuristic with a bounded skill vocabulary; complex layouts, ambiguous dates and scanned PDFs can lose information.
-- Scores are indicative heuristics and provider judgments are not proof of suitability or proficiency.
-- Account storage and process-memory resumes/history are unsuitable for a distributed production deployment.
-- Provider redaction is best effort, not guaranteed anonymization. The configured 20-second provider timeout is not a guaranteed total deadline.
-- Local skill scoring counts skills listed only under preferred/nice-to-have headings at half weight. Required-years detection ignores company/benefit durations such as "founded 25 years ago".
-- Improvement rewriting deliberately supports a narrow set of copy edits. Unsupported claims produce fallback/clarification; professional summary text is not retained for rewriting.
-- Drafts are session-only; exports are advice reports, not rewritten PDF/DOCX resumes. Print-to-PDF uses the browser dialog.
-- No production deployment configuration or health endpoint exists. Phase 5 tests do not constitute live browser/mobile or print-pagination validation.
+- Extraction is rule-based with a bounded skill vocabulary; complex layouts, unusual headings and scanned PDFs (no OCR) can lose information.
+- Requirement statuses based on related skills or similar wording are inferences; certification validity and degree field/completion are not verified.
+- The rewrite validator is intentionally strict and may reject useful AI output; it still permits plain verb changes, so every draft needs human review.
+- Sessions live in process memory and the API runs a single worker; a restart signs users out (persisted working data remains when SQLite is enabled).
+- The Docker images and CI workflow were written for this release but not built or run in the verification environment; the Playwright script was updated but not run.
+- Exports are reports, not rewritten resume files; print-to-PDF uses the browser dialog.
 
-Earlier phase reports describe their historical scope; the Phase 5 report records the current implementation and verification.
-
-Phase 5.1 real-browser QA: 44 browser scenarios, 175 backend tests and 26 frontend tests passed. See [browser QA and stabilization](docs/phase5-1-browser-qa.md) for fixes, reproduction commands and coverage limits.
+Historical phase reports live in [docs/](docs/).
